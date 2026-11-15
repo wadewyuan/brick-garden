@@ -233,7 +233,7 @@ function makeBrick(w, d, color, deco, form, face) {
   }
   if (isFrame(form)) {      // what fills the frame: glass with a white cross, or a door on a hinge
     const g = new THREE.Group(), turn = form !== formOf(form), fw = turn ? d : w, fd = turn ? w : d;
-    if (turn) g.rotation.y = Math.PI / 2;
+    g.rotation.y = (turn ? Math.PI / 2 : 0) + (face && formOf(form) === 9 ? Math.PI : 0);       // a door has a front: `face` 1 turns it right round
     m.add(g);
     const T = tall(form) * H, sill = sillOf(form), ow = fw - 2 * POST, oh = T - LINTEL - sill + .04, mid = sill + oh / 2 - .02;
     const part = (to, geo, mat, x, y, z, sx, sy, sz) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.scale.set(sx, sy, sz); to.add(o); return o; };
@@ -684,7 +684,7 @@ function refreshFree() {
   for (const h of cur.shapes) {         // every shape is drawn in the chosen color when it comes in that color
     const c = h.colors.includes(cur.color) ? cur.color : h.colors[0];
     const [w, d, s] = h === g ? turned(cur.sel, cur.rot) : [h.w, h.d, h.s];
-    h.el.firstChild.src = brickPic(w, d, c, h === g ? deco : 0, s, h === g && deco ? cur.rot % 2 : undefined);
+    h.el.firstChild.src = brickPic(w, d, c, h === g ? deco : 0, s, h === g && (deco || formOf(g.s) === 9) ? faceOf(cur.sel) : undefined);
     h.el.classList.toggle('sel', h === g);
   }
   const sw = $('swatches'); sw.textContent = '';
@@ -798,9 +798,11 @@ function magnetSpot(px, py, w, d, n) {
   cur.stick = { k, x: best.x, z: best.z };
   return best;
 }
+// which way round the picked brick is: a texture's pair of sides, or a door's front after a half turn
+const faceOf = o => formOf(o.s) === 9 ? +(cur.rot >= 2) : o.e ? cur.rot % 2 : 0;
 function spotAt(px, py) {
   const o = cur.sel, [w, d, s] = turned(o, cur.rot), at = magnetSpot(px, py, w, d, tall(s));
-  return at ? [w, d, at.x, at.y, at.z, o.c, o.e, s, o.e ? cur.rot % 2 : 0] : at;
+  return at ? [w, d, at.x, at.y, at.z, o.c, o.e, s, faceOf(o)] : at;
 }
 // the see-through brick that follows the finger; letting go drops the real one there
 let aim = null, aimKey = '';
@@ -823,7 +825,7 @@ let lastTurn = 0;
 function turnBrick() {
   if (state !== 'free' || $('turn').hidden || performance.now() - lastTurn < 180) return;
   lastTurn = performance.now();
-  cur.rot = (cur.rot + 1) % (isSlope(cur.sel.s) ? 4 : 2); sfx.pick(); refreshFree();
+  cur.rot = (cur.rot + 1) % (isSlope(cur.sel.s) || formOf(cur.sel.s) === 9 ? 4 : 2); sfx.pick(); refreshFree();
   if (down?.aim) showAim(spotAt(down.px, down.py));
 }
 $('turn').addEventListener('pointerdown', turnBrick);      // pointerdown, so a second finger can press it while the first one aims
@@ -880,7 +882,7 @@ function turnHeld() {
     const [w, d, x, , z, , , s = 0] = h.b;
     h.b[0] = d; h.b[1] = w; h.b[2] = sum - z - d; h.b[4] = dif + x;
     h.b[7] = isSlope(s) ? s % 4 + 1 : faces(s) ? (s === formOf(s) ? s + 1 : s - 1) : s;
-    h.b[8] = h.b[8] ? 0 : 1;       // its texture turns with it
+    if (formOf(s) !== 9 || s === 10) h.b[8] = h.b[8] ? 0 : 1;       // its texture turns with it; a door goes right round in four quarter turns
     h.mesh = remesh(h.b, h.mesh, carry);
   }
   if (down?.grab) moveHeld(down.px, down.py);
