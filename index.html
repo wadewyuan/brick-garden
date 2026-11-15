@@ -39,6 +39,7 @@ button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulat
 .card.locked .w{opacity:0}
 .card.next{animation:bob 1.1s ease-in-out infinite}
 .card.shake,.opt.shake{animation:shake .4s}
+#boot{font-size:18px;font-weight:600;max-width:90vw;text-align:center;color:#5a6b85}
 #gear{position:fixed;right:10px;bottom:10px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.5);font-size:24px;color:#8aa}
 
 /* —— build —— */
@@ -154,6 +155,7 @@ body.free .opt.sel{animation:none;outline-width:6px}
   <h1 id="logo"></h1>
   <div id="worlds"></div>
   <div id="cards"></div>
+ <div id="boot">Loading…</div>
   <button id="gear" aria-label="Grown-ups: press and hold">⚙</button>
 </div>
 
@@ -167,7 +169,15 @@ body.free .opt.sel{animation:none;outline-width:6px}
   </div>
 </div>
 
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script>
+// if the game cannot start, say why on the page instead of staying blank
+(function () {
+  var boot = document.getElementById('boot');
+  function tell(msg) { if (!boot.hidden) boot.textContent = 'The game could not start: ' + msg; }
+  window.addEventListener('error', function (e) { tell(e.message || ('could not load ' + ((e.target && (e.target.src || e.target.href)) || 'a file'))); }, true);
+  window.addEventListener('unhandledrejection', function (e) { tell(String((e.reason && e.reason.message) || e.reason)); });
+})();
+</script>
 <script src="models.js"></script>
 <script type="module" src="game.js"></script>
 </body>

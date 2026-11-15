@@ -1,6 +1,6 @@
 # Brick Garden
 
-A brick-building game for a 4-year-old on a tablet. Pure front end, no build step; Three.js loads from a CDN, so it needs a network connection.
+A brick-building game for a 4-year-old on a tablet. Pure front end, no build step; Three.js 0.170.0 is kept in `vendor/three` (its add-ons import it by relative path), so nothing loads from a CDN.
 
 Run: `python3 -m http.server 8765` in this folder, then open `http://<this-computer's-ip>:8765` on the tablet (same Wi-Fi). "Add to Home Screen" gives a full-screen icon.
 

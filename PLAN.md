@@ -8,7 +8,7 @@ A brick-building game for one 4-year-old who reads basic English and plays on a 
 - **Short missions** (1–3 minutes) that end with the model coming alive, a word card and a gift box.
 - **Reading built in.** Short words shown big and spoken aloud (browser voice).
 - **Difficulty comes from less help**, not only bigger models.
-- **Stack:** no build step, Three.js from CDN, plain JS, synthesized audio, localStorage. Same as `~/src/dafuweng-3d`.
+- **Stack:** no build step, Three.js kept in `vendor/three`, plain JS, synthesized audio, localStorage. Same as `~/src/dafuweng-3d`.
 
 ## Core loop
 Pick a mission → build it → it comes alive → open the gift (new bricks) → bricks become usable in free build.
@@ -50,7 +50,7 @@ Side puzzles to mix in later: fix the broken model, find the missing brick, mirr
 - The island: finished models live on a diorama and react to taps.
 - Word-card collection screen.
 - Background music (pentatonic, synthesized).
-- Offline use (vendor Three.js, add a manifest and service worker).
+- Offline use: Three.js is vendored; still needs a manifest and service worker.
 - Bigger plate for later mission worlds (12×12); `setPlate(n)` already handles any size.
 - Try on the real tablet: tap sizes, tray scrolling, voice quality, title bar crowding tall models.
 

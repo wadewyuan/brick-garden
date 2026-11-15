@@ -1,8 +1,8 @@
 /* Brick Garden · scene, building, celebrations and screens. Missions live in models.js. */
-import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as THREE from './vendor/three/three.module.min.js';      // Three.js 0.170.0, kept in the project so nothing loads from a CDN
+import { RoundedBoxGeometry } from './vendor/three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from './vendor/three/addons/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from './vendor/three/addons/environments/RoomEnvironment.js';
 import { sfx } from './audio.js';
 
 const { COLORS, WORLDS, MISSIONS, PLATE, tall } = window.BRICKS;
@@ -924,6 +924,7 @@ function frame(now) {
 }
 
 renderHome();
+$('boot').hidden = true;
 requestAnimationFrame(frame);
 
 // —— test hooks: ?auto=duck plays a mission by itself, &stop=3 pauses after three bricks ——
