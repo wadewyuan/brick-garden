@@ -889,8 +889,17 @@ function turnHeld() {
   }
   if (down?.grab) moveHeld(down.px, down.py);
 }
-function dropHeld(cancel) {
+// is the finger over the bin? While something is carried the bin stays on screen as a place to drop it
+function overBin(px, py) { const r = $('trash').getBoundingClientRect(); return px > r.left - 24 && px < r.right + 24 && py > r.top - 24 && py < r.bottom + 24; }
+function dropHeld(cancel, bin) {
   if (!held) return;
+  document.body.classList.remove('grabbing'); $('trash').classList.remove('hot');
+  if (bin && !cancel) {        // dropped on the bin: what was carried is thrown away (undo brings it back where it was)
+    const at = new THREE.Vector3(); ray.setFromCamera(ndc.set(-.75, .35), camera); ray.ray.at(cam.dist * cam.zoom * .7, at);
+    for (const h of held.set) { h.from.forEach((v, i) => { h.b[i] = v; }); h.mesh.removeFromParent(); }
+    cur.undo.push({ remove: held.set.map(h => h.b) }); sfx.pop(); burst(at, 24, { speed: 4, up: 4, life: .8 });
+    held = null; changedFree(); return;
+  }
   const [dx, dy, dz] = cancel ? [0, 0, 0] : held.d;
   for (const h of held.set) {
     if (cancel) h.from.forEach((v, i) => { h.b[i] = v; });
@@ -1035,7 +1044,7 @@ canvas.addEventListener('pointerdown', e => {
   if (state === 'free' && (cur.hand || e.button > 0)) { down.pan = true; return; }     // the hand (or a right mouse button) slides the plate
   if (state === 'free' && cur.erase) return;       // the bin is on: a tap picks what to remove
   if (state === 'free' && cur.grab) {              // the grab tool is on: pick up the brick under the finger
-    if (grabAt(e.clientX, e.clientY)) { down.grab = true; document.body.classList.add('placing'); moveHeld(e.clientX, e.clientY); }
+    if (grabAt(e.clientX, e.clientY)) { down.grab = true; document.body.classList.add('placing', 'grabbing'); moveHeld(e.clientX, e.clientY); }
     return;
   }
   if (!aiming()) return;
@@ -1052,7 +1061,7 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
   if (!down || e.pointerId !== down.id) return;
-  if (down.grab) { down.px = e.clientX; down.py = e.clientY; return moveHeld(e.clientX, e.clientY); }
+  if (down.grab) { down.px = e.clientX; down.py = e.clientY; $('trash').classList.toggle('hot', overBin(e.clientX, e.clientY)); return moveHeld(e.clientX, e.clientY); }
   if (down.pan) { if (state === 'free') panBy(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; return; }
   if (down.aim) { down.px = e.clientX; down.py = e.clientY; return aiming() && showAim(state === 'free' ? spotAt(e.clientX, e.clientY) : aimMission(e.clientX, e.clientY)); }
   if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 16) down.drag = true;
@@ -1063,7 +1072,7 @@ addEventListener('pointerup', e => {
   if (!down || e.pointerId !== down.id) return;
   const d = down; down = null; document.body.classList.remove('placing');
   if (d.pan) return;
-  if (d.grab) return dropHeld();
+  if (d.grab) return dropHeld(false, overBin(e.clientX, e.clientY));
   if (d.aim) return state === 'free' ? dropAim() : aiming() ? dropMission() : showAim(undefined);
   if (!d.drag) tap(e.clientX, e.clientY);
 });
