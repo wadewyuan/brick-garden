@@ -753,9 +753,14 @@ const ndc = new THREE.Vector2();
 // undefined: not on the board. null: on the board, but the stack is already too tall.
 // What the finger is touching. A top means "on here"; a brick's side means "next to it".
 // The side of a stud counts as the top it stands on.
+const GROUND = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 function touchAt(px, py) {
   ray.far = Infinity; ray.setFromCamera(ndc.set(px / innerWidth * 2 - 1, 1 - py / innerHeight * 2), camera);
   const hit = ray.intersectObjects([plateMesh, ...cur.group.children], true)[0];
+  if (!hit && state === 'free') {       // just past the plate's edge still counts, so a brick can be pulled out into an overhang
+    const p = ray.ray.intersectPlane(GROUND, new THREE.Vector3());
+    return p && Math.abs(p.x) < HALF + 1.5 && Math.abs(p.z) < HALF + 1.5 ? { hit: { point: p }, up: true, q: p } : undefined;
+  }
   if (!hit) return undefined;
   const nrm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld), p = hit.point;
   const stud = Math.hypot(p.x + HALF - Math.floor(p.x + HALF) - .5, p.z + HALF - Math.floor(p.z + HALF) - .5) < .33;
@@ -774,16 +779,19 @@ function boardSpot(px, py, w, d, n = 1) {
 // Free build: bricks pull toward a tidy place, like magnets. Near the finger, a spot that sits squarely on the brick
 // below, or flush against a neighbour, wins over the exact spot under the finger; moving a stud further overrides it.
 const landY = (x, z, w, d) => { let y = 0; for (const b of cur.bricks) if (b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z) y = Math.max(y, b[3] + tall(b[7])); return y; };
+// Free build lets a brick stick out one stud past the plate's edge, for eaves, as long as it rests on another brick.
+const EAVE = 1, onPlate = (x, z, w, d) => x >= 0 && z >= 0 && x + w <= SIZE && z + d <= SIZE;
 function magnetSpot(px, py, w, d, n) {
   const t = touchAt(px, py); if (!t) return undefined;
   const { hit, up, q } = t;
   const fx = q.x + HALF - w / 2, fz = q.z + HALF - d / 2;                 // where the finger says, before rounding to studs
-  const rx = clampI(Math.round(fx), 0, SIZE - w), rz = clampI(Math.round(fz), 0, SIZE - d);
+  const rx = clampI(Math.round(fx), -EAVE, SIZE - w + EAVE), rz = clampI(Math.round(fz), -EAVE, SIZE - d + EAVE);
   const want = up ? Math.round(hit.point.y / H) : landY(rx, rz, w, d);   // the level the finger is touching
   const k = w + ',' + d;
   let best = null, top = -Infinity;
-  for (let x = Math.max(0, rx - 1); x <= Math.min(SIZE - w, rx + 1); x++) for (let z = Math.max(0, rz - 1); z <= Math.min(SIZE - d, rz + 1); z++) {
+  for (let x = Math.max(-EAVE, rx - 1); x <= Math.min(SIZE - w + EAVE, rx + 1); x++) for (let z = Math.max(-EAVE, rz - 1); z <= Math.min(SIZE - d + EAVE, rz + 1); z++) {
     const y = landY(x, z, w, d);
+    if (!y && !onPlate(x, z, w, d)) continue;       // only a brick resting on another may hang over the edge
     let s = (y === want ? 100 : 0) - 12 * Math.hypot(x - fx, z - fz), on = 0;
     if (cur.stick && cur.stick.k === k && cur.stick.x === x && cur.stick.z === z) s += 2;      // a little force is needed to pull it away
     for (const b of cur.bricks) {
@@ -864,9 +872,12 @@ function moveHeld(px, py) {
   const t = touchAt(px, py); if (!t) return;       // off the board: stay where it was last
   const a = held.anchor, bs = held.set.map(h => h.b);
   let dx = Math.round(t.q.x + HALF - a[0] / 2) - a[2], dz = Math.round(t.q.z + HALF - a[1] / 2) - a[4];
-  dx = clampI(dx, -Math.min(...bs.map(b => b[2])), SIZE - Math.max(...bs.map(b => b[2] + b[0])));
-  dz = clampI(dz, -Math.min(...bs.map(b => b[4])), SIZE - Math.max(...bs.map(b => b[4] + b[1])));
-  const dy = Math.max(...bs.map(b => landY(b[2] + dx, b[4] + dz, b[0], b[1]) - b[3]));      // the whole stack comes down until one brick rests on something
+  const x0 = Math.min(...bs.map(b => b[2])), x1 = Math.max(...bs.map(b => b[2] + b[0])), z0 = Math.min(...bs.map(b => b[4])), z1 = Math.max(...bs.map(b => b[4] + b[1]));
+  const fit = m => [clampI(dx, -x0 - m, SIZE - x1 + m), clampI(dz, -z0 - m, SIZE - z1 + m)];
+  const drop = (ex, ez) => Math.max(...bs.map(b => landY(b[2] + ex, b[4] + ez, b[0], b[1]) - b[3]));      // the whole stack comes down until one brick rests on something
+  let dy;
+  [dx, dz] = fit(EAVE); dy = drop(dx, dz);
+  if (bs.some(b => !(b[3] + dy) && !onPlate(b[2] + dx, b[4] + dz, b[0], b[1]))) { [dx, dz] = fit(0); dy = drop(dx, dz); }      // nothing on the ground may hang over the edge
   held.d = [dx, dy, dz]; carry.position.set(dx, dy * H + .25, dz);
 }
 // a fresh mesh for a brick whose shape or place changed
