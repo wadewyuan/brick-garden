@@ -668,7 +668,7 @@ const ndc = new THREE.Vector2();
 // The side of a stud counts as the top it stands on.
 function touchAt(px, py) {
   ray.far = Infinity; ray.setFromCamera(ndc.set(px / innerWidth * 2 - 1, 1 - py / innerHeight * 2), camera);
-  const hit = ray.intersectObjects([plateMesh, studMesh, ...cur.group.children], true)[0];
+  const hit = ray.intersectObjects([plateMesh, ...cur.group.children], true)[0];
   if (!hit) return undefined;
   const nrm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld), p = hit.point;
   const stud = Math.hypot(p.x + HALF - Math.floor(p.x + HALF) - .5, p.z + HALF - Math.floor(p.z + HALF) - .5) < .33;
