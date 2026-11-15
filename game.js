@@ -632,8 +632,8 @@ const myBricks = () => {
   const mine = [...new Set([...STARTER, ...save.bricks])].map(k => { const [w, d, c, e, s] = k.split(','); return { w: +w, d: +d, c, e: +e || 0, s: +s || 0 }; });
   // every plain 2×2 and 2×4 also comes as a tall brick, two layers high, so buildings go up faster
   const plain = mine.filter(o => !o.e && !o.s);
-  // and every color of the 2×4 also comes as a long 1×8
-  return [...mine, ...plain.filter(o => Math.min(o.w, o.d) === 2).map(o => ({ ...o, s: 15 })), ...plain.filter(o => o.w * o.d === 8).map(o => ({ ...o, w: 8, d: 1 }))];
+  // and every color of the 2×4 also comes as a long 1×8 and a big 4×8
+  return [...mine, ...plain.filter(o => Math.min(o.w, o.d) === 2).map(o => ({ ...o, s: 15 })), ...plain.filter(o => o.w * o.d === 8).flatMap(o => [{ ...o, w: 8, d: 1 }, { ...o, w: 8, d: 4 }])];
 };
 // the selected brick after `rot` quarter turns: [w, d, slope]
 function turned(o, rot) {
