@@ -599,7 +599,7 @@ function startFree() {
   for (const g of cur.shapes) {
     const el = document.createElement('button');
     el.className = 'opt'; el.innerHTML = '<img alt="">';
-    el.onclick = () => { if (state !== 'free') return; sfx.pick(); cur.shape = g; cur.rot = 0; cur.hand = false; refreshFree(); };
+    el.onclick = () => { if (state !== 'free') return; sfx.pick(); cur.shape = g; cur.rot = 0; cur.hand = false; cur.erase = false; refreshFree(); };
     g.el = el; tray.append(el);
   }
   cur.shape = cur.shapes.find(g => g.w === 2 && g.d === 2 && !g.s) || cur.shapes[0];
@@ -627,10 +627,11 @@ function refreshFree() {
   $('deco1').hidden = !g.decos.has(1); $('deco1').classList.toggle('on', cur.deco === 1);
   $('turn').hidden = g.w === g.d && !isSlope(g.s) && !faces(g.s);
   $('hint').innerHTML = hintOf(cur.color, g.s);
-  $('hand').classList.toggle('on', !!cur.hand);
+  $('hand').classList.toggle('on', !!cur.hand); $('trash').classList.toggle('on', !!cur.erase);
+  if (cur.erase) $('hint').textContent = 'Tap what to remove';
 }
 // the hand: while it is on, one finger slides the plate instead of placing bricks; picking a brick turns it off
-$('hand').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.hand = !cur.hand; refreshFree(); };
+$('hand').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.hand = !cur.hand; cur.erase = false; refreshFree(); };
 $('deco1').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.deco = cur.deco ? 0 : 1; refreshFree(); };
 function addFree(b, drop) {
   const mesh = meshOf(b), rest = brickPos(b);
@@ -748,15 +749,42 @@ $('undo').onclick = () => {
   if (u.add) {
     cur.bricks.splice(cur.bricks.indexOf(u.add), 1);
     cur.group.remove(cur.group.children.find(m => m.userData.b === u.add));
-  } else for (const b of u.clear) addFree(b, false);
+  } else for (const b of u.clear || u.remove) addFree(b, false);
   changedFree();
 };
-$('trash').onclick = () => {
-  if (state !== 'free' || !cur.bricks.length) return;
-  sfx.pop(); cur.undo.push({ clear: cur.bricks });      // the undo button brings them back
-  for (const b of cur.bricks.slice(-40)) burst(brickPos(b).add(new THREE.Vector3(0, H / 2, 0)), 6, { speed: 4, up: 4, life: .8 });
-  cur.group.clear(); cur.bricks = []; changedFree();
+// The bin: tap it, then tap something on the plate. Everything joined to that brick (stacked or touching) goes at once.
+// The undo button brings it back. Holding the bin clears the whole plate.
+const joined = (a, b) => {
+  const ox = Math.min(a[2] + a[0], b[2] + b[0]) - Math.max(a[2], b[2]), oz = Math.min(a[4] + a[1], b[4] + b[1]) - Math.max(a[4], b[4]);
+  const oy = Math.min(a[3] + tall(a[7]), b[3] + tall(b[7])) - Math.max(a[3], b[3]);
+  return (ox > 0 && oz > 0 && oy === 0) || (oy > 0 && ((ox === 0 && oz > 0) || (oz === 0 && ox > 0)));
 };
+function removeBricks(list, how) {
+  sfx.pop(); cur.undo.push({ [how]: list });
+  for (const b of list.slice(-40)) burst(brickPos(b).add(new THREE.Vector3(0, topOf(b) / 2, 0)), 6, { speed: 4, up: 4, life: .8 });
+  for (const b of list) { cur.bricks.splice(cur.bricks.indexOf(b), 1); cur.group.remove(cur.group.children.find(m => m.userData.b === b)); }
+  changedFree();
+}
+function eraseAt(px, py) {
+  ray.far = Infinity; ray.setFromCamera(ndc.set(px / innerWidth * 2 - 1, 1 - py / innerHeight * 2), camera);
+  let o = ray.intersectObjects(cur.group.children, true)[0]?.object;
+  while (o && !o.userData.b) o = o.parent;
+  if (!o) return sfx.wrong();
+  const group = [o.userData.b];
+  for (let i = 0; i < group.length; i++) for (const b of cur.bricks) if (!group.includes(b) && joined(group[i], b)) group.push(b);
+  removeBricks(group, 'remove'); cur.erase = false; refreshFree();
+}
+{
+  let hold, held = false;
+  const bin = $('trash');
+  bin.addEventListener('pointerdown', () => { held = false; hold = setTimeout(() => { held = true; if (state === 'free' && cur.bricks.length) { removeBricks([...cur.bricks], 'clear'); cur.erase = false; refreshFree(); } }, 900); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) bin.addEventListener(ev, () => clearTimeout(hold));
+  bin.onclick = () => {
+    if (state !== 'free' || held) return;
+    if (!cur.bricks.length) return sfx.wrong();
+    sfx.pick(); cur.erase = !cur.erase; cur.hand = false; refreshFree();
+  };
+}
 
 // —— finished: the model comes alive ——
 function finish() {
@@ -852,6 +880,7 @@ canvas.addEventListener('pointerdown', e => {
   }
   down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, px: e.clientX, py: e.clientY, drag: false, id: e.pointerId, t: performance.now() };
   if (state === 'free' && (cur.hand || e.button > 0)) { down.pan = true; return; }     // the hand (or a right mouse button) slides the plate
+  if (state === 'free' && cur.erase) return;       // the bin is on: a tap picks what to remove
   if (!aiming()) return;
   // finger on the board: aim a brick. Finger on the background: turn the view.
   if (boardSpot(e.clientX, e.clientY, 1, 1) === undefined) return;
@@ -887,6 +916,7 @@ const _v = new THREE.Vector3();
 const toScreen = v => { _v.copy(v).project(camera); return [(_v.x + 1) / 2 * innerWidth, (1 - _v.y) / 2 * innerHeight]; };
 // a tap on a glowing spot puts the picked brick there
 function tap(x, y) {
+  if (state === 'free' && cur.erase) return eraseAt(x, y);
   if (state !== 'build' || !spots.length) return;
   const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
   let hit = null, best = 1, mine = null, bestMine = 1;      // the nearest spot, and the nearest one the picked brick fits
@@ -970,6 +1000,7 @@ $('boot').hidden = true;
 requestAnimationFrame(frame);
 
 // ?debug exposes a probe: where would the picked free-build brick go for a finger over plate position (x, y, z)?
+if (params.has('debug')) window.tapAt = (x, y, z) => tap(...toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF)));
 if (params.has('debug')) window.probe = (x, y, z, keep) => { if (!keep) cur.stick = null; const [px, py] = toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF)); const b = spotAt(px, py); return b && [b[2], b[3], b[4]]; };
 
 // —— test hooks: ?auto=duck plays a mission by itself, &stop=3 pauses after three bricks ——

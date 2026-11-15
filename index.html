@@ -54,7 +54,7 @@ body.placing #hud>*:not(#ref){opacity:0;pointer-events:none}
 .tool{top:calc(max(12px,env(safe-area-inset-top)) + 88px)}
 #undo{left:12px}#zoom{right:12px}
 #hand{right:12px;top:calc(max(12px,env(safe-area-inset-top)) + 176px)}
-#hand.on{background:#fff3b8;box-shadow:0 0 0 5px #ffc400}
+#hand.on,#trash.on{background:#fff3b8;box-shadow:0 0 0 5px #ffc400}
 #bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(14px,env(safe-area-inset-bottom)) + clamp(76px,10vw,100px) + 32px);
   display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.75);box-shadow:0 5px 0 rgba(120,160,190,.4);max-width:calc(100vw - 24px)}
 body:not(.free) #bar{display:none}
@@ -133,7 +133,7 @@ body.free .opt.sel{animation:none;outline-width:6px}
   <div id="title"><div id="say"></div><div id="hint"></div><div id="dots"></div></div>
   <button id="spin" class="round" aria-label="Turn"><svg viewBox="0 0 24 24" fill="none" stroke="#ff8a1f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20.5 3.5v4.2h-4.2"/></svg></button>
   <button id="undo" class="round tool" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="#2f8fe0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a5.5 5.5 0 0 1 0 11h-2" transform="translate(0 -3)"/></svg></button>
-  <button id="trash" class="round tool" aria-label="Clear all"><svg viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg></button>
+  <button id="trash" class="round tool" aria-label="Remove something"><svg viewBox="0 0 24 24" fill="none" stroke="#e53935" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg></button>
   <button id="zoom" class="round tool" aria-label="Closer or farther"><svg viewBox="0 0 24 24" fill="none" stroke="#7a4fd0" stroke-width="2.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.8 10.5h5.4M10.5 7.8v5.4"/></svg></button>
   <button id="hand" class="round tool" aria-label="Slide the plate"><svg viewBox="0 0 24 24" fill="none" stroke="#2f8fe0" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3 9 6M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
   <img id="ref" alt="" hidden>
