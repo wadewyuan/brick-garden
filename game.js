@@ -68,7 +68,7 @@ const sun = addLights(scene, true);
 // 7/8 window frame (two layers tall), 9/10 door frame (three layers tall), 11/12 arch (two layers tall);
 // 8, 10 and 12 are turned a quarter. 13 cone, 14 pointed roof, 15 tall block (two layers).
 // A brick's texture (the `deco` slot): 1 eyes on its front and back; on all four sides 2 wall, 3 waves, 4 grass,
-// or one character written as '#A'. Patterns and characters are free-build only, on plain and tall blocks.
+// or one character written as '#A' (front and back only). Patterns and characters are free-build only, on plain and tall blocks.
 const STUD = new THREE.CylinderGeometry(.3, .3, .18, 20);
 const geoCache = {}, matCache = {}, edgeCache = {};
 const flat = parts => mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p));
@@ -204,7 +204,9 @@ function faceGeo(fw, fh, u, v) {
 const canTex = s => !s || s === 15;      // plain blocks and tall blocks have flat sides to draw on
 function addTexture(m, w, d, color, deco, layers) {
   const mat = texMat(deco, inkOf(color)), h = layers * H, char = typeof deco === 'string';
-  for (const [len, off, turn] of [[w, d / 2, 0], [w, -d / 2, Math.PI], [d, w / 2, Math.PI / 2], [d, -w / 2, -Math.PI / 2]]) {
+  const sides = [[w, d / 2, 0], [w, -d / 2, Math.PI], [d, w / 2, Math.PI / 2], [d, -w / 2, -Math.PI / 2]];
+  // patterns wrap all four sides; a character goes on the front and back only (the two long sides of a turned brick)
+  for (const [len, off, turn] of char ? (w >= d ? sides.slice(0, 2) : sides.slice(2)) : sides) {
     const side = char ? Math.min(len, h) - .14 : 0;
     const geo = char ? faceGeo(side, side, 1, 1) : deco === 4 ? faceGeo(len - .1, H - .1, len, 1) : faceGeo(len - .1, h - .1, len, layers);
     const o = new THREE.Mesh(geo, mat);
