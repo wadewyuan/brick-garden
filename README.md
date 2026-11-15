@@ -18,7 +18,7 @@ Run: `python3 -m http.server 8765` in this folder, then open `http://<this-compu
 - Free build uses a big 24×24 plate. The magnifier button switches between a close view and the whole plate; two fingers pinch to zoom and slide to move around. The hand button makes one finger slide the plate instead of placing bricks; picking a brick switches it off.
 - Turning a brick while placing it: keep the first finger on the plate and tap anywhere with a second finger (or press the turn button). With a mouse: scroll the wheel, or press R or space, while holding the brick; right-drag slides the plate.
 - Free-build pickers: the bottom tray chooses the shape; the bar above it chooses the color, opens the texture menu and turns the brick (windows and doors can face either way).
-- Textures (plain and tall blocks only): none, eyes, wall, waves, grass, or one character (0-9, A-Z, a-z) picked from a keypad. All textures are on the brick's front and back only. Patterns repeat along the brick; a character is bold and drawn in a darker or lighter shade of the brick's own color, whichever reads better.
+- Textures (plain and tall blocks only): none, eyes, wall, waves, grass, or one character (0-9, A-Z, a-z) picked from a keypad. All textures are on two opposite sides of the brick (front and back) and turn with it, including on square bricks. Patterns repeat along the brick; a character is bold and drawn in a darker or lighter shade of the brick's own color, whichever reads better.
 - Idle for 6 seconds, or two wrong picks, and the game points at the answer.
 - Drag sideways or tap the orange button to turn the view.
 - Grown-ups menu: press and hold the gear on the home screen (voice on/off, unlock all, reset).
