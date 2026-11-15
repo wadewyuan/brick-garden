@@ -9,7 +9,7 @@ for (const m of MISSIONS) {
   m.bricks.forEach((b, i) => {
     const [w, d, x, y, z, c] = b;
     if (!COLORS[c]) fail(m, `brick ${i} has unknown color ${c}`);
-    if (![undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(b[7])) fail(m, `brick ${i} has a bad form ${b[7]}`);
+    if (![undefined, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(b[7])) fail(m, `brick ${i} has a bad form ${b[7]}`);
     if (![undefined, 0, 1].includes(b[6])) fail(m, `brick ${i} has a bad decoration ${b[6]}`);
     if (m.mode === 4 && i && y < m.bricks[i - 1][3]) fail(m, `brick ${i} is listed out of layer order`);
     if (x < 0 || z < 0 || y < 0 || x + w > PLATE || z + d > PLATE) fail(m, `brick ${i} is off the plate`);

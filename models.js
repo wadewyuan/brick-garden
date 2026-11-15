@@ -8,7 +8,8 @@
             7 window frame, two layers tall, you look through it from the front (8: turned a quarter);
             9 door frame, three layers tall, with a door that opens (10: turned a quarter);
             11 arch, two layers tall, spanning along x (12: along z);
-            13 cone; 14 pointed roof with four sides (both end in a point, so nothing goes on top)
+            13 cone; 14 pointed roof with four sides (both end in a point, so nothing goes on top);
+            15 tall block, two layers high
    Bricks are listed in build order: each one must rest on the plate or on an earlier brick.
    Animals face +x. */
 (function (root) {
@@ -311,7 +312,7 @@
   ];
 
   // how many layers a brick stands tall
-  const tall = form => form === 7 || form === 8 || form === 11 || form === 12 ? 2 : form === 9 || form === 10 ? 3 : 1;
+  const tall = form => form === 7 || form === 8 || form === 11 || form === 12 || form === 15 ? 2 : form === 9 || form === 10 ? 3 : 1;
 
   const api = { COLORS, WORLDS, MISSIONS, PLATE: 8, tall };
   if (typeof module !== 'undefined') module.exports = api; else root.BRICKS = api;

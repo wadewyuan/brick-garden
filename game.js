@@ -64,7 +64,7 @@ const sun = addLights(scene, true);
 // —— bricks ——
 // A brick's form: 0 block, 1..4 slope (running down toward +x, +z, -x, -z), 5 wheels on an axle, 6 round,
 // 7/8 window frame (two layers tall), 9/10 door frame (three layers tall), 11/12 arch (two layers tall);
-// 8, 10 and 12 are turned a quarter. 13 cone, 14 pointed roof.
+// 8, 10 and 12 are turned a quarter. 13 cone, 14 pointed roof, 15 tall block (two layers).
 // A brick's decoration: 1 eyes, drawn on its front and back faces.
 const STUD = new THREE.CylinderGeometry(.3, .3, .18, 20);
 const geoCache = {}, matCache = {}, edgeCache = {};
@@ -82,9 +82,9 @@ function slopeGeo(run, width) {
   if (run >= 2) for (let k = 0; k < width; k++) parts.push(STUD.clone().translate(.5 - run / 2, H + .09, k + .5 - width / 2));
   return flat(parts);
 }
-function blockGeo(w, d) {
-  const parts = [new RoundedBoxGeometry(w - .04, H, d - .04, 3, .07).translate(0, H / 2, 0)];
-  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, H + .09, k + .5 - d / 2));
+function blockGeo(w, d, h = H) {
+  const parts = [new RoundedBoxGeometry(w - .04, h, d - .04, 3, .07).translate(0, h / 2, 0)];
+  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, h + .09, k + .5 - d / 2));
   return flat(parts);
 }
 function roundGeo(w) {
@@ -127,6 +127,7 @@ const coneGeo = w => new THREE.CylinderGeometry(.09 * w, w / 2 - .04, pointH(w),
 const roofGeo = w => new THREE.ConeGeometry((w / 2 - .02) * Math.SQRT2, pointH(w), 4).rotateY(Math.PI / 4).translate(0, pointH(w) / 2, 0);
 function brickGeo(w, d, form = 0) {
   return geoCache[w + 'x' + d + 's' + form] ||= (() => {
+    if (form === 15) return blockGeo(w, d, 2 * H);
     if (form === 13) return flat([coneGeo(Math.min(w, d))]);
     if (form === 14) return flat([roofGeo(Math.min(w, d))]);
     if (formOf(form) === 11) return form === 11 ? archGeo(w, d) : archGeo(d, w).rotateY(Math.PI / 2);
@@ -557,8 +558,11 @@ function hintSpot(i) { if (!spots.some(s => s.i === i)) makeSpot(i, cur.m.bricks
 
 // —— free build: any unlocked brick, anywhere; bricks drop onto whatever is below ——
 const STARTER = ['2,2,brown', '2,2,green', '4,2,green'];
-const MAX_LAYERS = 10;
-const myBricks = () => [...new Set([...STARTER, ...save.bricks])].map(k => { const [w, d, c, e, s] = k.split(','); return { w: +w, d: +d, c, e: +e || 0, s: +s || 0 }; });
+const myBricks = () => {
+  const mine = [...new Set([...STARTER, ...save.bricks])].map(k => { const [w, d, c, e, s] = k.split(','); return { w: +w, d: +d, c, e: +e || 0, s: +s || 0 }; });
+  // every plain 2×2 and 2×4 also comes as a tall brick, two layers high, so buildings go up faster
+  return [...mine, ...mine.filter(o => !o.e && !o.s && Math.min(o.w, o.d) === 2).map(o => ({ ...o, s: 15 }))];
+};
 // the selected brick after `rot` quarter turns: [w, d, slope]
 function turned(o, rot) {
   const odd = rot % 2;
@@ -575,7 +579,8 @@ function shapesOwned() {
     if (!g.colors.includes(o.c)) g.colors.push(o.c);
     if (o.e) g.decos.add(o.e);
   }
-  return [...map.values()].sort((a, b) => formOf(a.s) - formOf(b.s) || a.w * a.d - b.w * b.d);
+  const rank = g => g.s === 15 ? .5 : formOf(g.s);       // tall blocks come right after the plain ones
+  return [...map.values()].sort((a, b) => rank(a) - rank(b) || a.w * a.d - b.w * b.d);
 }
 function startFree() {
   if (cur) scene.remove(cur.group);
@@ -646,7 +651,7 @@ function panBy(dx, dy) {        // slide the view by a finger movement in pixels
   cam.target.x = t.x; cam.target.z = t.z;
 }
 function frameFree(now) {
-  cam.targetTo.y = Math.min(4, (cur.bricks.length ? heightOf(cur.bricks) : 0) * .3) - .6;
+  cam.targetTo.y = (cur.bricks.length ? heightOf(cur.bricks) : 0) * .3 - .6;       // the view rises with the building
   if (now) cam.target.copy(cam.targetTo);
 }
 $('zoom').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.view = cur.view > .75 ? NEAR : 1; };
@@ -675,7 +680,7 @@ function boardSpot(px, py, w, d, n = 1) {
   const z = clampI(Math.round(q.z + HALF - d / 2), 0, SIZE - d);
   let y = 0;
   for (const b of cur.bricks) if (b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z) y = Math.max(y, b[3] + tall(b[7]));
-  return y + n > MAX_LAYERS ? null : { x, y, z };
+  return { x, y, z };
 }
 // Free build: bricks pull toward a tidy place, like magnets. Near the finger, a spot that sits squarely on the brick
 // below, or flush against a neighbour, wins over the exact spot under the finger; moving a stud further overrides it.
@@ -704,7 +709,7 @@ function magnetSpot(px, py, w, d, n) {
     if (s > top) { top = s; best = { x, y, z }; }
   }
   cur.stick = { k, x: best.x, z: best.z };
-  return best.y + n > MAX_LAYERS ? null : best;
+  return best;
 }
 function spotAt(px, py) {
   const o = cur.sel, [w, d, s] = turned(o, cur.rot), at = magnetSpot(px, py, w, d, tall(s));

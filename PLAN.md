@@ -36,7 +36,7 @@ Side puzzles to mix in later: fix the broken model, find the missing brick, mirr
 | Space | ufo, robot, rover, rocket, station | see-through bricks; purple | done |
 
 ## Free build
-- Done: unlocked bricks only; 24×24 plate (missions stay on 8×8); finger-following preview brick, drops on release; magnetic snapping to neighbours (`magnetSpot`); controls hide while a brick is held; top = stack, side = next to; two-step picker (shape tray, then color / eyes / angle bar); zoom button, hand button (one finger slides the plate), two-finger pinch and slide; a second finger turns the brick being placed; undo; clear (undoable); saved.
+- Done: unlocked bricks only, plus a two-layer-tall version of every plain 2×2 and 2×4; no height limit; 24×24 plate (missions stay on 8×8); finger-following preview brick, drops on release; magnetic snapping to neighbours (`magnetSpot`); controls hide while a brick is held; top = stack, side = next to; two-step picker (shape tray, then color / eyes / angle bar); zoom button, hand button (one finger slides the plate), two-finger pinch and slide; a second finger turns the brick being placed; undo; clear (undoable); saved.
 - Ideas: remove any single brick; make a creation come alive; save several creations; photo/share for parents; turn a creation into a mission (free build as the level editor).
 
 ## Backlog
