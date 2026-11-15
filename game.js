@@ -22,7 +22,9 @@ try { Object.assign(save, JSON.parse(localStorage.getItem(KEY) || '{}')); } catc
   const frame = { 2: 7, 3: 9 };
   save.bricks = [...new Set(save.bricks.map(k => { const p = k.split(','); return frame[p[3]] && !+p[4] ? [p[0], p[1], p[2], 0, frame[p[3]]].join() : k; }))];
   const shift = save.plate === FREE ? 0 : (FREE - PLATE) / 2;
-  save.free = (save.free || []).map(b => [b[0], b[1], b[2] + shift, b[3], b[4] + shift, b[5], b[6] === 1 ? 1 : 0, b[7] || 0]);
+  const tex = e => save.v === 2 ? ([1, 2, 3, 4].includes(e) || /^#[0-9a-zA-Z]$/.test(e) ? e : 0) : e === 1 ? 1 : 0;     // before v2 only eyes existed
+  save.free = (save.free || []).map(b => [b[0], b[1], b[2] + shift, b[3], b[4] + shift, b[5], tex(b[6]), b[7] || 0]);
+  save.v = 2;
   save.plate = FREE;
 }
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { } };
@@ -65,7 +67,8 @@ const sun = addLights(scene, true);
 // A brick's form: 0 block, 1..4 slope (running down toward +x, +z, -x, -z), 5 wheels on an axle, 6 round,
 // 7/8 window frame (two layers tall), 9/10 door frame (three layers tall), 11/12 arch (two layers tall);
 // 8, 10 and 12 are turned a quarter. 13 cone, 14 pointed roof, 15 tall block (two layers).
-// A brick's decoration: 1 eyes, drawn on its front and back faces.
+// A brick's texture (the `deco` slot): 1 eyes on its front and back; on all four sides 2 wall, 3 waves, 4 grass,
+// or one character written as '#A'. Patterns and characters are free-build only, on plain and tall blocks.
 const STUD = new THREE.CylinderGeometry(.3, .3, .18, 20);
 const geoCache = {}, matCache = {}, edgeCache = {};
 const flat = parts => mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p));
@@ -151,12 +154,72 @@ const tireGeo = new THREE.CylinderGeometry(WHEEL, WHEEL, .5, 32).rotateX(Math.PI
 const hubGeo = new THREE.CylinderGeometry(.4, .4, .56, 20).rotateX(Math.PI / 2), hubMat = plain('#8f99a6', .4);
 const boltGeo = new THREE.CylinderGeometry(.08, .08, .6, 8).rotateX(Math.PI / 2);
 
+// —— textures: drawn once per ink color on a small canvas, then laid over a brick's sides ——
+// The ink is the brick's own color made darker or lighter, whichever stands out more against it.
+const lumOf = c => .2126 * c.r + .7152 * c.g + .0722 * c.b;       // THREE.Color keeps linear values, as contrast math wants
+const inks = {};
+function inkOf(color) {
+  return inks[color] ||= (() => {
+    const base = new THREE.Color(COLORS[color]), dark = base.clone().lerp(new THREE.Color('#000000'), .62), light = base.clone().lerp(new THREE.Color('#ffffff'), .8);
+    const ratio = o => { const a = lumOf(base) + .05, b = lumOf(o) + .05; return Math.max(a, b) / Math.min(a, b); };
+    return '#' + (ratio(dark) >= ratio(light) ? dark : light).getHexString();
+  })();
+}
+const texCache = {}, texMats = {}, faceGeos = {};
+function texOf(kind, ink) {
+  return texCache[kind + ink] ||= (() => {
+    const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const g = cv.getContext('2d'); g.strokeStyle = g.fillStyle = ink; g.lineCap = g.lineJoin = 'round';
+    if (kind === 2) {              // wall: three rows of little bricks, every other row shifted
+      g.lineWidth = 12; g.beginPath();
+      for (const y of [0, S / 3, S * 2 / 3, S]) { g.moveTo(0, y); g.lineTo(S, y); }
+      for (const [x, r] of [[S / 2, 0], [0, 1], [S, 1], [S / 2, 2]]) { g.moveTo(x, r * S / 3); g.lineTo(x, (r + 1) * S / 3); }
+      g.stroke();
+    } else if (kind === 3) {       // waves: two wavy lines
+      g.lineWidth = 16;
+      for (const y0 of [72, 184]) { g.beginPath(); for (let x = -8; x <= S + 8; x += 8) g.lineTo(x, y0 + Math.sin(x / S * Math.PI * 2) * 26); g.stroke(); }
+    } else if (kind === 4) {       // grass: blades growing from the bottom edge
+      const tips = [150, 96, 168, 70, 140, 110, 176, 88];
+      g.beginPath(); g.moveTo(0, S);
+      tips.forEach((y, i) => { const x0 = i * S / 8; g.lineTo(x0 + S / 32, y + (i % 2 ? 0 : 12)); g.lineTo(x0 + S / 16, y); g.lineTo(x0 + S / 8, S - 40); });
+      g.lineTo(S, S); g.closePath(); g.fill();
+    } else {                       // one bold character
+      g.font = `900 ${S * .82}px ui-rounded, "Arial Rounded MT Bold", "Helvetica Neue", Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      const ch = kind[1], mt = g.measureText(ch), top = mt.actualBoundingBoxAscent, low = mt.actualBoundingBoxDescent;
+      g.fillText(ch, S / 2, S / 2 + (top - low) / 2);       // centered on the ink, so "g" and "T" both sit in the middle
+    }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    return t;
+  })();
+}
+const texMat = (kind, ink) => texMats[kind + ink] ||= new THREE.MeshStandardMaterial({ map: texOf(kind, ink), transparent: true, roughness: .5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+// a flat sheet for one side of a brick; the picture repeats `u` times across and `v` times up
+function faceGeo(fw, fh, u, v) {
+  return faceGeos[[fw, fh, u, v]] ||= (() => {
+    const g = new THREE.PlaneGeometry(fw, fh), uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+    return g;
+  })();
+}
+const canTex = s => !s || s === 15;      // plain blocks and tall blocks have flat sides to draw on
+function addTexture(m, w, d, color, deco, layers) {
+  const mat = texMat(deco, inkOf(color)), h = layers * H, char = typeof deco === 'string';
+  for (const [len, off, turn] of [[w, d / 2, 0], [w, -d / 2, Math.PI], [d, w / 2, Math.PI / 2], [d, -w / 2, -Math.PI / 2]]) {
+    const side = char ? Math.min(len, h) - .14 : 0;
+    const geo = char ? faceGeo(side, side, 1, 1) : deco === 4 ? faceGeo(len - .1, H - .1, len, 1) : faceGeo(len - .1, h - .1, len, layers);
+    const o = new THREE.Mesh(geo, mat);
+    o.position.y = char ? h / 2 : deco === 4 ? H / 2 : h / 2;
+    o.rotation.y = turn; o.translateZ(off - .015); m.add(o);
+  }
+}
+
 function makeBrick(w, d, color, deco, form) {
   const m = new THREE.Mesh(brickGeo(w, d, form), brickMat(color));
   m.castShadow = m.receiveShadow = true;
   const add = (geo, mat, x, y, z, sx = 1, sy = 1, sz = 1) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.scale.set(sx, sy, sz); m.add(o); return o; };
-  if (deco) for (const s of [1, -1]) {
-    if (deco === 1) {
+  if (deco && deco !== 1 && canTex(form)) addTexture(m, w, d, color, deco, tall(form));
+  if (deco === 1) for (const s of [1, -1]) {
+    {
       add(whiteGeo, whiteMat, .06, H * .55, s * (d / 2 - .06), 1, 1, .3);
       add(eyeGeo, eyeMat, .08, H * .55, s * (d / 2 - .03), 1, 1, .45);
       add(glintGeo, glintMat, .15, H * .55 + .08, s * (d / 2 + .05));
@@ -342,6 +405,7 @@ function show(which) {
 // —— home ——
 const unlocked = i => i === 0 || save.done.includes(MISSIONS[i - 1].id);
 function renderHome() {
+  closeMenus();
   state = 'home'; show('home'); ghost.visible = false; clearSpots();
   if (cur) { scene.remove(cur.group); cur = null; }
   const nextUp = MISSIONS.findIndex((m, i) => unlocked(i) && !save.done.includes(m.id));
@@ -609,12 +673,12 @@ function startFree() {
 function refreshFree() {
   const g = cur.shape;
   if (!g.colors.includes(cur.color)) cur.color = g.colors[0];
-  if (!g.decos.has(cur.deco)) cur.deco = 0;
-  cur.sel = { w: g.w, d: g.d, c: cur.color, e: cur.deco, s: g.s };
+  const deco = canTex(g.s) ? cur.deco : 0;       // the chosen texture is kept for the next block shape
+  cur.sel = { w: g.w, d: g.d, c: cur.color, e: deco, s: g.s };
   for (const h of cur.shapes) {         // every shape is drawn in the chosen color when it comes in that color
     const c = h.colors.includes(cur.color) ? cur.color : h.colors[0];
     const [w, d, s] = h === g ? turned(cur.sel, cur.rot) : [h.w, h.d, h.s];
-    h.el.firstChild.src = brickPic(w, d, c, h === g ? cur.deco : 0, s);
+    h.el.firstChild.src = brickPic(w, d, c, h === g ? deco : 0, s);
     h.el.classList.toggle('sel', h === g);
   }
   const sw = $('swatches'); sw.textContent = '';
@@ -624,7 +688,8 @@ function refreshFree() {
     el.onclick = () => { if (state !== 'free') return; sfx.pick(); say(nameOf(c, g.s)); cur.color = c; refreshFree(); };
     sw.append(el);
   }
-  $('deco1').hidden = !g.decos.has(1); $('deco1').classList.toggle('on', cur.deco === 1);
+  $('tex').hidden = !canTex(g.s); $('tex').classList.toggle('on', !!deco);
+  for (const el of $('texmenu').children) el.classList.toggle('on', el.dataset.t === (typeof cur.deco === 'string' ? 'abc' : String(cur.deco)));
   $('turn').hidden = g.w === g.d && !isSlope(g.s) && !faces(g.s);
   $('hint').innerHTML = hintOf(cur.color, g.s);
   $('hand').classList.toggle('on', !!cur.hand); $('trash').classList.toggle('on', !!cur.erase); $('grab').classList.toggle('on', !!cur.grab);
@@ -633,7 +698,21 @@ function refreshFree() {
 }
 // the hand: while it is on, one finger slides the plate instead of placing bricks; picking a brick turns it off
 $('hand').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.hand = !cur.hand; cur.erase = cur.grab = false; refreshFree(); };
-$('deco1').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.deco = cur.deco ? 0 : 1; refreshFree(); };
+// the texture menu: none, eyes, wall, waves, grass, or a character picked from a big keypad
+const closeMenus = () => { $('texmenu').hidden = $('keys').hidden = true; };
+$('tex').onclick = () => { if (state !== 'free') return; sfx.pick(); const open = $('texmenu').hidden; closeMenus(); $('texmenu').hidden = !open; };
+for (const el of $('texmenu').children) el.onclick = () => {
+  if (state !== 'free') return;
+  sfx.pick(); closeMenus();
+  if (el.dataset.t === 'abc') { $('keys').hidden = false; return; }
+  cur.deco = +el.dataset.t; refreshFree();
+};
+for (const ch of '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') {
+  const el = document.createElement('button'); el.textContent = ch;
+  el.onclick = () => { if (state !== 'free') return; sfx.pick(); say(ch); closeMenus(); cur.deco = '#' + ch; refreshFree(); };
+  $('keys').append(el);
+}
+addEventListener('keydown', e => { if (state === 'free' && !$('keys').hidden && /^[0-9a-zA-Z]$/.test(e.key)) { closeMenus(); cur.deco = '#' + e.key; refreshFree(); } });
 function addFree(b, drop) {
   const mesh = meshOf(b), rest = brickPos(b);
   mesh.userData.b = b; mesh.position.copy(rest); cur.group.add(mesh); cur.bricks.push(b);
@@ -742,7 +821,7 @@ function turnBrick() {
   if (down?.aim) showAim(spotAt(down.px, down.py));
 }
 $('turn').addEventListener('pointerdown', turnBrick);      // pointerdown, so a second finger can press it while the first one aims
-addEventListener('keydown', e => { if (e.key === 'r' || e.key === ' ') held ? turnHeld() : turnBrick(); });
+addEventListener('keydown', e => { if ((e.key === 'r' || e.key === ' ') && $('keys').hidden) held ? turnHeld() : turnBrick(); });
 $('undo').onclick = () => {
   if (state !== 'free') return;
   const u = cur.undo.pop(); if (!u) { sfx.wrong(); return; }
@@ -930,6 +1009,7 @@ const fingers = new Map();
 const aiming = () => state === 'free' || (state === 'build' && cur.m.mode === 5);
 const spread = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
 canvas.addEventListener('pointerdown', e => {
+  closeMenus();
   sfx.unlock(); fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (fingers.size > 1) {
     // a second finger while the first one has been aiming a brick for a moment: turn the brick

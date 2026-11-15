@@ -37,7 +37,7 @@ Side puzzles to mix in later: fix the broken model, find the missing brick, mirr
 | Space | ufo, robot, rover, rocket, station | see-through bricks; purple | done |
 
 ## Free build
-- Done: unlocked bricks only, plus a two-layer-tall version of every plain 2×2 and 2×4; no height limit; 24×24 plate (missions stay on 8×8); finger-following preview brick, drops on release; magnetic snapping to neighbours (`magnetSpot`); controls hide while a brick is held; top = stack, side = next to; two-step picker (shape tray, then color / eyes / angle bar); zoom button, hand button (one finger slides the plate), two-finger pinch and slide; a second finger turns the brick being placed; undo; grab tool moves a brick with whatever is stacked on it (no magnet); bin removes one joined group of bricks (hold to clear all), undoable; saved.
+- Done: unlocked bricks only, plus a two-layer-tall version of every plain 2×2 and 2×4; no height limit; 24×24 plate (missions stay on 8×8); finger-following preview brick, drops on release; magnetic snapping to neighbours (`magnetSpot`); controls hide while a brick is held; top = stack, side = next to; two-step picker (shape tray, then color / texture / angle bar); textures on blocks: eyes, wall, waves, grass, one character; zoom button, hand button (one finger slides the plate), two-finger pinch and slide; a second finger turns the brick being placed; undo; grab tool moves a brick with whatever is stacked on it (no magnet); bin removes one joined group of bricks (hold to clear all), undoable; saved.
 - Ideas: remove any single brick; make a creation come alive; save several creations; photo/share for parents; turn a creation into a mission (free build as the level editor).
 
 ## Backlog
@@ -45,6 +45,7 @@ Side puzzles to mix in later: fix the broken model, find the missing brick, mirr
 - Flat tiles were dropped: half-height bricks do not fit the one-layer grid.
 - Cones and pointed roofs stand taller than their layer, so a brick stacked on one in free build cuts into it.
 - Mode 5 uses a fixed picture; a rotatable reference model would help with models that have depth.
+- Textures are free-build only; missions could use them (a wall-pattern castle, letter blocks that spell the word).
 - Doors only open on a finished mission model; tapping a door in free build could open it too.
 - Free build has no way to turn the view by dragging once the plate fills the screen (only the turn button).
 - Wheels are wider than their 1-stud footprint, so they can poke into a brick placed right beside them in free build.
