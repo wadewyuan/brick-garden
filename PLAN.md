@@ -3,7 +3,7 @@
 A brick-building game for one 4-year-old who reads basic English and plays on a tablet. Private use, not public.
 
 ## Principles
-- **Real brick proportions.** A brick is 1.2 studs tall (9.6 mm on an 8 mm stud grid; the big toddler bricks are the same shape at twice the size). Studs are 0.6 wide.
+- **Real brick proportions.** A brick is 1.2 studs tall (9.6 mm on an 8 mm stud grid; the big toddler bricks are the same shape at twice the size). Studs are 0.6 wide and 0.2125 tall (4.8 mm, 1.7 mm); a brick's body is 0.2 mm narrower than its grid cell. There are no thin plates (a plate is a third of a brick).
 - **Tap, don't drag precisely.** One finger, big targets, bricks snap to an 8×8 stud grid.
 - **No fail state.** No timer, no score loss. Idle or repeated wrong picks → the game points at the answer.
 - **Short missions** (1–3 minutes) that end with the model coming alive, a word card and a gift box.

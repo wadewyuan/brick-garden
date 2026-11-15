@@ -69,7 +69,9 @@ const sun = addLights(scene, true);
 // 8, 10 and 12 are turned a quarter. 13 cone, 14 pointed roof, 15 tall block (two layers).
 // A brick's texture (the `deco` slot), on two opposite sides that turn with the brick: 1 eyes, 2 wall, 3 waves, 4 grass,
 // or one character written as '#A'. Patterns and characters are free-build only, on plain and tall blocks.
-const STUD = new THREE.CylinderGeometry(.3, .3, .18, 20);
+// real brick sizes, in stud pitches (8 mm): studs are 0.6 wide and 0.2125 tall; a brick's body stops 0.0125 short of each grid line
+const SH = .2125, GAP = .025;
+const STUD = new THREE.CylinderGeometry(.3, .3, SH, 20);
 const geoCache = {}, matCache = {}, edgeCache = {};
 const flat = parts => mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p));
 const isSlope = s => s >= 1 && s <= 4;
@@ -79,55 +81,55 @@ const faces = s => isFrame(s) || formOf(s) === 11;      // bricks with two ways 
 const POST = .3, LINTEL = .26, sillOf = s => formOf(s) === 7 ? .2 : .08;
 // a ramp `run` studs long that goes down toward +x; with room for it, the high end keeps one row of studs
 function slopeGeo(run, width) {
-  const a = run / 2 - .02, top = run >= 2 ? 1 - run / 2 : .14 - run / 2;
+  const a = run / 2 - GAP / 2, top = run >= 2 ? 1 - run / 2 : .14 - run / 2;
   const side = new THREE.Shape([[-a, 0], [a, 0], [a, .16], [top, H], [-a, H]].map(p => new THREE.Vector2(...p)));
-  const parts = [new THREE.ExtrudeGeometry(side, { depth: width - .04, bevelEnabled: false }).translate(0, 0, -(width - .04) / 2)];
-  if (run >= 2) for (let k = 0; k < width; k++) parts.push(STUD.clone().translate(.5 - run / 2, H + .09, k + .5 - width / 2));
+  const parts = [new THREE.ExtrudeGeometry(side, { depth: width - GAP, bevelEnabled: false }).translate(0, 0, -(width - GAP) / 2)];
+  if (run >= 2) for (let k = 0; k < width; k++) parts.push(STUD.clone().translate(.5 - run / 2, H + SH / 2, k + .5 - width / 2));
   return flat(parts);
 }
 function blockGeo(w, d, h = H) {
-  const parts = [new RoundedBoxGeometry(w - .04, h, d - .04, 3, .07).translate(0, h / 2, 0)];
-  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, h + .09, k + .5 - d / 2));
+  const parts = [new RoundedBoxGeometry(w - GAP, h, d - GAP, 3, .07).translate(0, h / 2, 0)];
+  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, h + SH / 2, k + .5 - d / 2));
   return flat(parts);
 }
 function roundGeo(w) {
-  const parts = [new THREE.CylinderGeometry(w / 2 - .04, w / 2 - .04, H, 28).translate(0, H / 2, 0)];
+  const parts = [new THREE.CylinderGeometry(w / 2 - GAP / 2, w / 2 - GAP / 2, H, 28).translate(0, H / 2, 0)];
   const pull = w > 1 ? .78 : 1;       // studs sit a little closer together, inside the round edge
-  for (let i = 0; i < w; i++) for (let k = 0; k < w; k++) parts.push(STUD.clone().translate((i + .5 - w / 2) * pull, H + .09, (k + .5 - w / 2) * pull));
+  for (let i = 0; i < w; i++) for (let k = 0; k < w; k++) parts.push(STUD.clone().translate((i + .5 - w / 2) * pull, H + SH / 2, (k + .5 - w / 2) * pull));
   return flat(parts);
 }
 // a frame you look through along z: two posts, a sill and a lintel with studs on top
 function frameGeo(w, d, form) {
   const T = tall(form) * H, sill = sillOf(form);
-  const box = (bw, bh, x, y) => new RoundedBoxGeometry(bw, bh, d - .04, 2, .05).translate(x, y, 0);
-  const parts = [box(POST, T, -(w - .04 - POST) / 2, T / 2), box(POST, T, (w - .04 - POST) / 2, T / 2),
-    box(w - .04, LINTEL, 0, T - LINTEL / 2), box(w - .04, sill, 0, sill / 2)];
-  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, T + .09, k + .5 - d / 2));
+  const box = (bw, bh, x, y) => new RoundedBoxGeometry(bw, bh, d - GAP, 2, .05).translate(x, y, 0);
+  const parts = [box(POST, T, -(w - GAP - POST) / 2, T / 2), box(POST, T, (w - GAP - POST) / 2, T / 2),
+    box(w - GAP, LINTEL, 0, T - LINTEL / 2), box(w - GAP, sill, 0, sill / 2)];
+  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, T + SH / 2, k + .5 - d / 2));
   return flat(parts);
 }
 // the raised block between two wheels, on an axle; the wheels stand taller and wider than its ends
 const WHEEL = .75, AXLE = .6;
 function axleGeo(w, d) {
   const long = Math.max(w, d), bw = w >= d ? Math.max(1, w - 2) : w, bd = w >= d ? d : Math.max(1, d - 2);
-  const parts = [new RoundedBoxGeometry(bw - .04, H - AXLE, bd - .04, 3, .07).translate(0, (H + AXLE) / 2, 0)];
+  const parts = [new RoundedBoxGeometry(bw - GAP, H - AXLE, bd - GAP, 3, .07).translate(0, (H + AXLE) / 2, 0)];
   const rod = new THREE.CylinderGeometry(.14, .14, long - .6, 12); w >= d ? rod.rotateZ(Math.PI / 2) : rod.rotateX(Math.PI / 2);
   parts.push(rod.translate(0, WHEEL, 0));
-  for (let i = 0; i < bw; i++) for (let k = 0; k < bd; k++) parts.push(STUD.clone().translate(i + .5 - bw / 2, H + .09, k + .5 - bd / 2));
+  for (let i = 0; i < bw; i++) for (let k = 0; k < bd; k++) parts.push(STUD.clone().translate(i + .5 - bw / 2, H + SH / 2, k + .5 - bd / 2));
   return flat(parts);
 }
 // an arch spanning `w` studs along x: two legs, a round opening underneath, studs on top
 function archGeo(w, d) {
-  const T = 2 * H, W = w / 2 - .02, a = Math.max(.3, w / 2 - .85), foot = .2, ry = T - .42 - foot, pts = [[-W, 0], [-a, 0]];
+  const T = 2 * H, W = w / 2 - GAP / 2, a = Math.max(.3, w / 2 - .85), foot = .2, ry = T - .42 - foot, pts = [[-W, 0], [-a, 0]];
   for (let i = 0; i <= 20; i++) { const t = Math.PI * (1 - i / 20); pts.push([a * Math.cos(t), foot + ry * Math.sin(t)]); }
   pts.push([a, 0], [W, 0], [W, T], [-W, T]);
-  const parts = [new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(...p))), { depth: d - .04, bevelEnabled: false, curveSegments: 1 }).translate(0, 0, -(d - .04) / 2)];
-  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, T + .09, k + .5 - d / 2));
+  const parts = [new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(...p))), { depth: d - GAP, bevelEnabled: false, curveSegments: 1 }).translate(0, 0, -(d - GAP) / 2)];
+  for (let i = 0; i < w; i++) for (let k = 0; k < d; k++) parts.push(STUD.clone().translate(i + .5 - w / 2, T + SH / 2, k + .5 - d / 2));
   return flat(parts);
 }
 // bricks that end in a point: a round cone, or a roof with four sides. They stand a little taller than their layer.
 const pointH = w => w > 1 ? H * 1.4 : H * 1.1;
 const coneGeo = w => new THREE.CylinderGeometry(.09 * w, w / 2 - .04, pointH(w), 28).translate(0, pointH(w) / 2, 0);
-const roofGeo = w => new THREE.ConeGeometry((w / 2 - .02) * Math.SQRT2, pointH(w), 4).rotateY(Math.PI / 4).translate(0, pointH(w) / 2, 0);
+const roofGeo = w => new THREE.ConeGeometry((w / 2 - GAP / 2) * Math.SQRT2, pointH(w), 4).rotateY(Math.PI / 4).translate(0, pointH(w) / 2, 0);
 function brickGeo(w, d, form = 0) {
   return geoCache[w + 'x' + d + 's' + form] ||= (() => {
     if (form === 15) return blockGeo(w, d, 2 * H);
@@ -210,7 +212,7 @@ function addTexture(m, w, d, color, deco, layers, face) {
     const geo = char ? faceGeo(side, side, 1, 1) : deco === 4 ? faceGeo(len - .1, H - .1, len, 1) : faceGeo(len - .1, h - .1, len, layers);
     const o = new THREE.Mesh(geo, mat);
     o.position.y = char ? h / 2 : deco === 4 ? H / 2 : h / 2;
-    o.rotation.y = turn; o.translateZ(off - .015); m.add(o);
+    o.rotation.y = turn; o.translateZ(off - GAP / 2 + .004); m.add(o);
   }
 }
 
@@ -279,7 +281,7 @@ function setPlate(n) {
   plateMesh.position.y = -.15; plateMesh.receiveShadow = true; scene.add(plateMesh);
   studMesh = new THREE.InstancedMesh(STUD, plateMat, n * n); studMesh.receiveShadow = true;
   const mx = new THREE.Matrix4();
-  for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) studMesh.setMatrixAt(i * n + k, mx.makeTranslation(i + .5 - HALF, .09, k + .5 - HALF));
+  for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) studMesh.setMatrixAt(i * n + k, mx.makeTranslation(i + .5 - HALF, SH / 2, k + .5 - HALF));
   scene.add(studMesh);
   const big = n > PLATE, r = big ? n * .8 : 9;       // the table and the sun's shadow grow with the plate
   table.scale.set(n / PLATE, 1, n / PLATE);
