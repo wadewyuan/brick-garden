@@ -599,7 +599,7 @@ function startFree() {
   for (const g of cur.shapes) {
     const el = document.createElement('button');
     el.className = 'opt'; el.innerHTML = '<img alt="">';
-    el.onclick = () => { if (state !== 'free') return; sfx.pick(); cur.shape = g; cur.rot = 0; cur.hand = false; cur.erase = false; refreshFree(); };
+    el.onclick = () => { if (state !== 'free') return; sfx.pick(); cur.shape = g; cur.rot = 0; cur.hand = cur.erase = cur.grab = false; refreshFree(); };
     g.el = el; tray.append(el);
   }
   cur.shape = cur.shapes.find(g => g.w === 2 && g.d === 2 && !g.s) || cur.shapes[0];
@@ -627,11 +627,12 @@ function refreshFree() {
   $('deco1').hidden = !g.decos.has(1); $('deco1').classList.toggle('on', cur.deco === 1);
   $('turn').hidden = g.w === g.d && !isSlope(g.s) && !faces(g.s);
   $('hint').innerHTML = hintOf(cur.color, g.s);
-  $('hand').classList.toggle('on', !!cur.hand); $('trash').classList.toggle('on', !!cur.erase);
+  $('hand').classList.toggle('on', !!cur.hand); $('trash').classList.toggle('on', !!cur.erase); $('grab').classList.toggle('on', !!cur.grab);
   if (cur.erase) $('hint').textContent = 'Tap what to remove';
+  if (cur.grab) $('hint').textContent = 'Move a brick';
 }
 // the hand: while it is on, one finger slides the plate instead of placing bricks; picking a brick turns it off
-$('hand').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.hand = !cur.hand; cur.erase = false; refreshFree(); };
+$('hand').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.hand = !cur.hand; cur.erase = cur.grab = false; refreshFree(); };
 $('deco1').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.deco = cur.deco ? 0 : 1; refreshFree(); };
 function addFree(b, drop) {
   const mesh = meshOf(b), rest = brickPos(b);
@@ -746,12 +747,51 @@ $('undo').onclick = () => {
   if (state !== 'free') return;
   const u = cur.undo.pop(); if (!u) { sfx.wrong(); return; }
   sfx.pop();
-  if (u.add) {
+  if (u.move) for (const { b, from } of u.move) { [b[2], b[3], b[4]] = from; cur.group.children.find(m => m.userData.b === b).position.copy(brickPos(b)); }
+  else if (u.add) {
     cur.bricks.splice(cur.bricks.indexOf(u.add), 1);
     cur.group.remove(cur.group.children.find(m => m.userData.b === u.add));
   } else for (const b of u.clear || u.remove) addFree(b, false);
   changedFree();
 };
+// The grab tool: touch a brick and carry it somewhere else. Whatever is stacked on it comes along.
+// No magnets here: it lands exactly under the finger.
+const carry = new THREE.Group(); scene.add(carry);
+let held = null;      // { anchor, set: [{ b, mesh, from }], d: [dx, dy, dz] }
+function grabAt(px, py) {
+  ray.far = Infinity; ray.setFromCamera(ndc.set(px / innerWidth * 2 - 1, 1 - py / innerHeight * 2), camera);
+  let o = ray.intersectObjects(cur.group.children, true)[0]?.object;
+  while (o && !o.userData.b) o = o.parent;
+  if (!o) return false;
+  const list = [o.userData.b];       // the brick and everything resting on it, all the way up
+  const rests = (a, b) => b[3] === a[3] + tall(a[7]) && a[2] < b[2] + b[0] && a[2] + a[0] > b[2] && a[4] < b[4] + b[1] && a[4] + a[1] > b[4];
+  for (let i = 0; i < list.length; i++) for (const b of cur.bricks) if (!list.includes(b) && rests(list[i], b)) list.push(b);
+  held = { anchor: list[0], d: [0, 0, 0], set: list.map(b => ({ b, from: [b[2], b[3], b[4]], mesh: cur.group.children.find(m => m.userData.b === b) })) };
+  for (const h of held.set) { cur.bricks.splice(cur.bricks.indexOf(h.b), 1); carry.add(h.mesh); }
+  carry.position.set(0, .25, 0); sfx.pick();
+  return true;
+}
+function moveHeld(px, py) {
+  const t = touchAt(px, py); if (!t) return;       // off the board: stay where it was last
+  const a = held.anchor, bs = held.set.map(h => h.b);
+  let dx = Math.round(t.q.x + HALF - a[0] / 2) - a[2], dz = Math.round(t.q.z + HALF - a[1] / 2) - a[4];
+  dx = clampI(dx, -Math.min(...bs.map(b => b[2])), SIZE - Math.max(...bs.map(b => b[2] + b[0])));
+  dz = clampI(dz, -Math.min(...bs.map(b => b[4])), SIZE - Math.max(...bs.map(b => b[4] + b[1])));
+  const dy = Math.max(...bs.map(b => landY(b[2] + dx, b[4] + dz, b[0], b[1]) - b[3]));      // the whole stack comes down until one brick rests on something
+  held.d = [dx, dy, dz]; carry.position.set(dx, dy * H + .25, dz);
+}
+function dropHeld(cancel) {
+  if (!held) return;
+  const [dx, dy, dz] = cancel ? [0, 0, 0] : held.d, moved = dx || dy || dz;
+  for (const h of held.set) {
+    h.b[2] += dx; h.b[3] += dy; h.b[4] += dz;
+    h.mesh.position.copy(brickPos(h.b)); cur.group.add(h.mesh); cur.bricks.push(h.b);
+  }
+  if (moved) { cur.undo.push({ move: held.set.map(h => ({ b: h.b, from: h.from })) }); sfx.click(held.anchor[3]); changedFree(); }
+  held = null;
+}
+$('grab').onclick = () => { if (state !== 'free') return; sfx.pick(); cur.grab = !cur.grab; cur.hand = cur.erase = false; refreshFree(); };
+
 // The bin: tap it, then tap something on the plate. Everything joined to that brick (stacked or touching) goes at once.
 // The undo button brings it back. Holding the bin clears the whole plate.
 const joined = (a, b) => {
@@ -782,7 +822,7 @@ function eraseAt(px, py) {
   bin.onclick = () => {
     if (state !== 'free' || held) return;
     if (!cur.bricks.length) return sfx.wrong();
-    sfx.pick(); cur.erase = !cur.erase; cur.hand = false; refreshFree();
+    sfx.pick(); cur.erase = !cur.erase; cur.hand = cur.grab = false; refreshFree();
   };
 }
 
@@ -874,13 +914,17 @@ canvas.addEventListener('pointerdown', e => {
     // a second finger while the first one has been aiming a brick for a moment: turn the brick
     if (down?.aim && state === 'free' && performance.now() - down.t > 300) return turnBrick();
     // otherwise stop aiming; in free build two fingers slide and pinch the view
-    down = null; showAim(undefined); document.body.classList.remove('placing');
+    down = null; showAim(undefined); dropHeld(true); document.body.classList.remove('placing');
     pinch = state === 'free' && fingers.size === 2 ? spread() : null;
     return;
   }
   down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, px: e.clientX, py: e.clientY, drag: false, id: e.pointerId, t: performance.now() };
   if (state === 'free' && (cur.hand || e.button > 0)) { down.pan = true; return; }     // the hand (or a right mouse button) slides the plate
   if (state === 'free' && cur.erase) return;       // the bin is on: a tap picks what to remove
+  if (state === 'free' && cur.grab) {              // the grab tool is on: pick up the brick under the finger
+    if (grabAt(e.clientX, e.clientY)) { down.grab = true; document.body.classList.add('placing'); moveHeld(e.clientX, e.clientY); }
+    return;
+  }
   if (!aiming()) return;
   // finger on the board: aim a brick. Finger on the background: turn the view.
   if (boardSpot(e.clientX, e.clientY, 1, 1) === undefined) return;
@@ -895,6 +939,7 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
   if (!down || e.pointerId !== down.id) return;
+  if (down.grab) return moveHeld(e.clientX, e.clientY);
   if (down.pan) { if (state === 'free') panBy(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; return; }
   if (down.aim) { down.px = e.clientX; down.py = e.clientY; return aiming() && showAim(state === 'free' ? spotAt(e.clientX, e.clientY) : aimMission(e.clientX, e.clientY)); }
   if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 16) down.drag = true;
@@ -905,10 +950,11 @@ addEventListener('pointerup', e => {
   if (!down || e.pointerId !== down.id) return;
   const d = down; down = null; document.body.classList.remove('placing');
   if (d.pan) return;
+  if (d.grab) return dropHeld();
   if (d.aim) return state === 'free' ? dropAim() : aiming() ? dropMission() : showAim(undefined);
   if (!d.drag) tap(e.clientX, e.clientY);
 });
-addEventListener('pointercancel', e => { fingers.delete(e.pointerId); pinch = null; down = null; showAim(undefined); document.body.classList.remove('placing'); });
+addEventListener('pointercancel', e => { fingers.delete(e.pointerId); pinch = null; down = null; showAim(undefined); dropHeld(true); document.body.classList.remove('placing'); });
 // the mouse wheel zooms; while a brick is being aimed it turns the brick instead
 canvas.addEventListener('wheel', e => { if (state !== 'free') return; if (down?.aim) turnBrick(); else zoomBy(Math.exp(e.deltaY * .0015)); }, { passive: true });
 
@@ -1000,6 +1046,7 @@ $('boot').hidden = true;
 requestAnimationFrame(frame);
 
 // ?debug exposes a probe: where would the picked free-build brick go for a finger over plate position (x, y, z)?
+if (params.has('debug')) window.scr = (x, y, z) => toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF));
 if (params.has('debug')) window.tapAt = (x, y, z) => tap(...toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF)));
 if (params.has('debug')) window.probe = (x, y, z, keep) => { if (!keep) cur.stick = null; const [px, py] = toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF)); const b = spotAt(px, py); return b && [b[2], b[3], b[4]]; };
 
