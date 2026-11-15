@@ -387,7 +387,7 @@ function snap(bricks, px, radius) {
   return thumbCv.toDataURL();
 }
 const brickPics = {};
-const brickPic = (w, d, c, e, s, f) => brickPics[[w, d, c, e || 0, s || 0, f]] ||= snap([[w, d, 0, 0, 0, c, e || 0, s || 0, f]], 200, 2.8);
+const brickPic = (w, d, c, e, s, f) => brickPics[[w, d, c, e || 0, s || 0, f]] ||= snap([[w, d, 0, 0, 0, c, e || 0, s || 0, f]], 200, Math.max(2.8, Math.hypot(w, d) / 2 + .4));
 const picOf = o => brickPic(o.w, o.d, o.c, o.e, o.s);
 // how an owned brick is remembered in the save: "w,d,color" plus eyes and slope when it has them
 const brickKey = ([w, d, c, e, s]) => [w, d, c, ...(e || s ? [e || 0] : []), ...(s ? [s] : [])].join();
@@ -631,7 +631,9 @@ const STARTER = ['2,2,brown', '2,2,green', '4,2,green'];
 const myBricks = () => {
   const mine = [...new Set([...STARTER, ...save.bricks])].map(k => { const [w, d, c, e, s] = k.split(','); return { w: +w, d: +d, c, e: +e || 0, s: +s || 0 }; });
   // every plain 2×2 and 2×4 also comes as a tall brick, two layers high, so buildings go up faster
-  return [...mine, ...mine.filter(o => !o.e && !o.s && Math.min(o.w, o.d) === 2).map(o => ({ ...o, s: 15 }))];
+  const plain = mine.filter(o => !o.e && !o.s);
+  // and every color of the 2×4 also comes as a long 1×8
+  return [...mine, ...plain.filter(o => Math.min(o.w, o.d) === 2).map(o => ({ ...o, s: 15 })), ...plain.filter(o => o.w * o.d === 8).map(o => ({ ...o, w: 8, d: 1 }))];
 };
 // the selected brick after `rot` quarter turns: [w, d, slope]
 function turned(o, rot) {
