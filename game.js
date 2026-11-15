@@ -742,12 +742,12 @@ function turnBrick() {
   if (down?.aim) showAim(spotAt(down.px, down.py));
 }
 $('turn').addEventListener('pointerdown', turnBrick);      // pointerdown, so a second finger can press it while the first one aims
-addEventListener('keydown', e => { if (e.key === 'r' || e.key === ' ') turnBrick(); });
+addEventListener('keydown', e => { if (e.key === 'r' || e.key === ' ') held ? turnHeld() : turnBrick(); });
 $('undo').onclick = () => {
   if (state !== 'free') return;
   const u = cur.undo.pop(); if (!u) { sfx.wrong(); return; }
   sfx.pop();
-  if (u.move) for (const { b, from } of u.move) { [b[2], b[3], b[4]] = from; cur.group.children.find(m => m.userData.b === b).position.copy(brickPos(b)); }
+  if (u.move) for (const { b, from } of u.move) { from.forEach((v, i) => { b[i] = v; }); remesh(b, cur.group.children.find(m => m.userData.b === b), cur.group); }
   else if (u.add) {
     cur.bricks.splice(cur.bricks.indexOf(u.add), 1);
     cur.group.remove(cur.group.children.find(m => m.userData.b === u.add));
@@ -766,7 +766,7 @@ function grabAt(px, py) {
   const list = [o.userData.b];       // the brick and everything resting on it, all the way up
   const rests = (a, b) => b[3] === a[3] + tall(a[7]) && a[2] < b[2] + b[0] && a[2] + a[0] > b[2] && a[4] < b[4] + b[1] && a[4] + a[1] > b[4];
   for (let i = 0; i < list.length; i++) for (const b of cur.bricks) if (!list.includes(b) && rests(list[i], b)) list.push(b);
-  held = { anchor: list[0], d: [0, 0, 0], set: list.map(b => ({ b, from: [b[2], b[3], b[4]], mesh: cur.group.children.find(m => m.userData.b === b) })) };
+  held = { anchor: list[0], d: [0, 0, 0], set: list.map(b => ({ b, from: [...b], mesh: cur.group.children.find(m => m.userData.b === b) })) };
   for (const h of held.set) { cur.bricks.splice(cur.bricks.indexOf(h.b), 1); carry.add(h.mesh); }
   carry.position.set(0, .25, 0); sfx.pick();
   return true;
@@ -780,13 +780,34 @@ function moveHeld(px, py) {
   const dy = Math.max(...bs.map(b => landY(b[2] + dx, b[4] + dz, b[0], b[1]) - b[3]));      // the whole stack comes down until one brick rests on something
   held.d = [dx, dy, dz]; carry.position.set(dx, dy * H + .25, dz);
 }
+// a fresh mesh for a brick whose shape or place changed
+function remesh(b, old, parent) {
+  old?.removeFromParent();
+  const m = meshOf(b); m.userData.b = b; m.position.copy(brickPos(b)); parent.add(m); return m;
+}
+// turn everything being carried a quarter, around the grabbed brick
+let lastSpin = 0;
+function turnHeld() {
+  if (!held || performance.now() - lastSpin < 180) return;
+  lastSpin = performance.now(); sfx.pick();
+  const a = held.anchor, sum = Math.floor(a[2] + a[0] / 2 + a[4] + a[1] / 2), dif = Math.floor(a[4] + a[1] / 2 - a[2] - a[0] / 2);
+  for (const h of held.set) {
+    const [w, d, x, , z, , , s = 0] = h.b;
+    h.b[0] = d; h.b[1] = w; h.b[2] = sum - z - d; h.b[4] = dif + x;
+    h.b[7] = isSlope(s) ? s % 4 + 1 : faces(s) ? (s === formOf(s) ? s + 1 : s - 1) : s;
+    h.mesh = remesh(h.b, h.mesh, carry);
+  }
+  if (down?.grab) moveHeld(down.px, down.py);
+}
 function dropHeld(cancel) {
   if (!held) return;
-  const [dx, dy, dz] = cancel ? [0, 0, 0] : held.d, moved = dx || dy || dz;
+  const [dx, dy, dz] = cancel ? [0, 0, 0] : held.d;
   for (const h of held.set) {
+    if (cancel) h.from.forEach((v, i) => { h.b[i] = v; });
     h.b[2] += dx; h.b[3] += dy; h.b[4] += dz;
-    h.mesh.position.copy(brickPos(h.b)); cur.group.add(h.mesh); cur.bricks.push(h.b);
+    h.mesh = remesh(h.b, h.mesh, cur.group); cur.bricks.push(h.b);
   }
+  const moved = held.set.some(h => h.from.some((v, i) => h.b[i] !== v));
   if (moved) { cur.undo.push({ move: held.set.map(h => ({ b: h.b, from: h.from })) }); sfx.click(held.anchor[3]); changedFree(); }
   held = null;
 }
@@ -913,6 +934,7 @@ canvas.addEventListener('pointerdown', e => {
   if (fingers.size > 1) {
     // a second finger while the first one has been aiming a brick for a moment: turn the brick
     if (down?.aim && state === 'free' && performance.now() - down.t > 300) return turnBrick();
+    if (down?.grab && performance.now() - down.t > 300) return turnHeld();       // the same for a brick being carried
     // otherwise stop aiming; in free build two fingers slide and pinch the view
     down = null; showAim(undefined); dropHeld(true); document.body.classList.remove('placing');
     pinch = state === 'free' && fingers.size === 2 ? spread() : null;
@@ -939,7 +961,7 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
   if (!down || e.pointerId !== down.id) return;
-  if (down.grab) return moveHeld(e.clientX, e.clientY);
+  if (down.grab) { down.px = e.clientX; down.py = e.clientY; return moveHeld(e.clientX, e.clientY); }
   if (down.pan) { if (state === 'free') panBy(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; return; }
   if (down.aim) { down.px = e.clientX; down.py = e.clientY; return aiming() && showAim(state === 'free' ? spotAt(e.clientX, e.clientY) : aimMission(e.clientX, e.clientY)); }
   if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 16) down.drag = true;
@@ -956,7 +978,7 @@ addEventListener('pointerup', e => {
 });
 addEventListener('pointercancel', e => { fingers.delete(e.pointerId); pinch = null; down = null; showAim(undefined); dropHeld(true); document.body.classList.remove('placing'); });
 // the mouse wheel zooms; while a brick is being aimed it turns the brick instead
-canvas.addEventListener('wheel', e => { if (state !== 'free') return; if (down?.aim) turnBrick(); else zoomBy(Math.exp(e.deltaY * .0015)); }, { passive: true });
+canvas.addEventListener('wheel', e => { if (state !== 'free') return; if (down?.grab) turnHeld(); else if (down?.aim) turnBrick(); else zoomBy(Math.exp(e.deltaY * .0015)); }, { passive: true });
 
 const _v = new THREE.Vector3();
 const toScreen = v => { _v.copy(v).project(camera); return [(_v.x + 1) / 2 * innerWidth, (1 - _v.y) / 2 * innerHeight]; };
