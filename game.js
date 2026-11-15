@@ -7,7 +7,7 @@ import { sfx } from './audio.js';
 
 const { COLORS, WORLDS, MISSIONS, PLATE, tall } = window.BRICKS;
 const FREE = 24;                    // studs along each side of the free-build plate
-const H = .8;                       // brick height, in stud widths
+const H = 1.2;                      // brick height in stud widths, as on real bricks: 9.6 mm tall on an 8 mm stud grid
 let SIZE = PLATE, HALF = SIZE / 2;  // the plate in use: 8×8 for missions, 24×24 for free build
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -103,7 +103,7 @@ function frameGeo(w, d, form) {
   return flat(parts);
 }
 // the raised block between two wheels, on an axle; the wheels stand taller and wider than its ends
-const WHEEL = .66, AXLE = .3;
+const WHEEL = .75, AXLE = .6;
 function axleGeo(w, d) {
   const long = Math.max(w, d), bw = w >= d ? Math.max(1, w - 2) : w, bd = w >= d ? d : Math.max(1, d - 2);
   const parts = [new RoundedBoxGeometry(bw - .04, H - AXLE, bd - .04, 3, .07).translate(0, (H + AXLE) / 2, 0)];
@@ -122,7 +122,7 @@ function archGeo(w, d) {
   return flat(parts);
 }
 // bricks that end in a point: a round cone, or a roof with four sides. They stand a little taller than their layer.
-const pointH = w => w > 1 ? H * 1.7 : H * 1.25;
+const pointH = w => w > 1 ? H * 1.4 : H * 1.1;
 const coneGeo = w => new THREE.CylinderGeometry(.09 * w, w / 2 - .04, pointH(w), 28).translate(0, pointH(w) / 2, 0);
 const roofGeo = w => new THREE.ConeGeometry((w / 2 - .02) * Math.SQRT2, pointH(w), 4).rotateY(Math.PI / 4).translate(0, pointH(w) / 2, 0);
 function brickGeo(w, d, form = 0) {
@@ -148,7 +148,7 @@ const glintGeo = new THREE.SphereGeometry(.065, 8, 8), glintMat = new THREE.Mesh
 const UNIT = new THREE.BoxGeometry(1, 1, 1), doorMat = plain('#b07a45'), knobMat = plain('#ffd21f', .3);
 const glassMat = new THREE.MeshStandardMaterial({ color: '#9fdcff', roughness: .1, transparent: true, opacity: .45, depthWrite: false });
 const tireGeo = new THREE.CylinderGeometry(WHEEL, WHEEL, .5, 32).rotateX(Math.PI / 2), tireMat = plain('#25252c', .7);
-const hubGeo = new THREE.CylinderGeometry(.34, .34, .56, 20).rotateX(Math.PI / 2), hubMat = plain('#8f99a6', .4);
+const hubGeo = new THREE.CylinderGeometry(.4, .4, .56, 20).rotateX(Math.PI / 2), hubMat = plain('#8f99a6', .4);
 const boltGeo = new THREE.CylinderGeometry(.08, .08, .6, 8).rotateX(Math.PI / 2);
 
 function makeBrick(w, d, color, deco, form) {
@@ -180,7 +180,7 @@ function makeBrick(w, d, color, deco, form) {
   }
   if (form === 5) for (const s of [1, -1]) {       // a wheel at each end of the long side
     const wheel = new THREE.Group(), end = Math.max(w, d) / 2 - .5;
-    for (const [g, mt, x] of [[tireGeo, tireMat, 0], [hubGeo, hubMat, 0], [boltGeo, whiteMat, .19]]) { const o = new THREE.Mesh(g, mt); o.position.x = x; o.castShadow = true; wheel.add(o); }
+    for (const [g, mt, x] of [[tireGeo, tireMat, 0], [hubGeo, hubMat, 0], [boltGeo, whiteMat, .22]]) { const o = new THREE.Mesh(g, mt); o.position.x = x; o.castShadow = true; wheel.add(o); }
     if (w >= d) { wheel.rotation.y = Math.PI / 2; wheel.position.set(s * end, WHEEL, 0); }
     else { wheel.position.set(0, WHEEL, s * end); wheel.userData.wheel = true; }
     m.add(wheel);
@@ -318,7 +318,7 @@ function snap(bricks, px, radius) {
   return thumbCv.toDataURL();
 }
 const brickPics = {};
-const brickPic = (w, d, c, e, s) => brickPics[[w, d, c, e || 0, s || 0]] ||= snap([[w, d, 0, 0, 0, c, e || 0, s || 0]], 200, 2.5);
+const brickPic = (w, d, c, e, s) => brickPics[[w, d, c, e || 0, s || 0]] ||= snap([[w, d, 0, 0, 0, c, e || 0, s || 0]], 200, 2.8);
 const picOf = o => brickPic(o.w, o.d, o.c, o.e, o.s);
 // how an owned brick is remembered in the save: "w,d,color" plus eyes and slope when it has them
 const brickKey = ([w, d, c, e, s]) => [w, d, c, ...(e || s ? [e || 0] : []), ...(s ? [s] : [])].join();
