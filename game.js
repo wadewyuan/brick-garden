@@ -781,16 +781,24 @@ function boardSpot(px, py, w, d, n = 1) {
 const landY = (x, z, w, d) => { let y = 0; for (const b of cur.bricks) if (b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z) y = Math.max(y, b[3] + tall(b[7])); return y; };
 // Free build lets a brick stick out one stud past the plate's edge, for eaves, as long as it rests on another brick.
 const EAVE = 1, onPlate = (x, z, w, d) => x >= 0 && z >= 0 && x + w <= SIZE && z + d <= SIZE;
+// Where a w×d brick, n layers tall, comes to rest over (x, z): on the plate or on a brick's top, wherever there is room
+// for it, nearest to the level the finger is touching. So a brick can go under a bridge as well as on top of it.
+function restY(x, z, w, d, n, want) {
+  const over = cur.bricks.filter(b => b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z);
+  const free = y => !over.some(b => b[3] < y + n && b[3] + tall(b[7]) > y);
+  return [0, ...over.map(b => b[3] + tall(b[7]))].filter(free).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0];
+}
 function magnetSpot(px, py, w, d, n) {
   const t = touchAt(px, py); if (!t) return undefined;
   const { hit, up, q } = t;
   const fx = q.x + HALF - w / 2, fz = q.z + HALF - d / 2;                 // where the finger says, before rounding to studs
   const rx = clampI(Math.round(fx), -EAVE, SIZE - w + EAVE), rz = clampI(Math.round(fz), -EAVE, SIZE - d + EAVE);
-  const want = up ? Math.round(hit.point.y / H) : landY(rx, rz, w, d);   // the level the finger is touching
+  const level = up ? Math.round(hit.point.y / H) : Math.max(0, Math.floor(hit.point.y / H));
+  const want = up ? level : restY(rx, rz, w, d, n, level);   // the level the finger is touching, or where a brick beside the touched one would rest
   const k = w + ',' + d;
   let best = null, top = -Infinity;
   for (let x = Math.max(-EAVE, rx - 1); x <= Math.min(SIZE - w + EAVE, rx + 1); x++) for (let z = Math.max(-EAVE, rz - 1); z <= Math.min(SIZE - d + EAVE, rz + 1); z++) {
-    const y = landY(x, z, w, d);
+    const y = restY(x, z, w, d, n, want);
     if (!y && !onPlate(x, z, w, d)) continue;       // only a brick resting on another may hang over the edge
     let s = (y === want ? 100 : 0) - 12 * Math.hypot(x - fx, z - fz), on = 0;
     if (cur.stick && cur.stick.k === k && cur.stick.x === x && cur.stick.z === z) s += 2;      // a little force is needed to pull it away
@@ -875,9 +883,13 @@ function moveHeld(px, py) {
   const x0 = Math.min(...bs.map(b => b[2])), x1 = Math.max(...bs.map(b => b[2] + b[0])), z0 = Math.min(...bs.map(b => b[4])), z1 = Math.max(...bs.map(b => b[4] + b[1]));
   const fit = m => [clampI(dx, -x0 - m, SIZE - x1 + m), clampI(dz, -z0 - m, SIZE - z1 + m)];
   const drop = (ex, ez) => Math.max(...bs.map(b => landY(b[2] + ex, b[4] + ez, b[0], b[1]) - b[3]));      // the whole stack comes down until one brick rests on something
+  // first try the level the finger touches (this lets a brick slide in under others); if the stack does not fit there, drop it from above
+  const level = Math.round(t.q.y / H), clear = (ex, ey, ez) => bs.every(b => !cur.bricks.some(o =>
+    o[2] < b[2] + ex + b[0] && o[2] + o[0] > b[2] + ex && o[4] < b[4] + ez + b[1] && o[4] + o[1] > b[4] + ez && o[3] < b[3] + ey + tall(b[7]) && o[3] + tall(o[7]) > b[3] + ey));
+  const settle = (ex, ez) => { const ey = restY(a[2] + ex, a[4] + ez, a[0], a[1], tall(a[7]), level) - a[3]; return clear(ex, ey, ez) ? ey : drop(ex, ez); };
   let dy;
-  [dx, dz] = fit(EAVE); dy = drop(dx, dz);
-  if (bs.some(b => !(b[3] + dy) && !onPlate(b[2] + dx, b[4] + dz, b[0], b[1]))) { [dx, dz] = fit(0); dy = drop(dx, dz); }      // nothing on the ground may hang over the edge
+  [dx, dz] = fit(EAVE); dy = settle(dx, dz);
+  if (bs.some(b => !(b[3] + dy) && !onPlate(b[2] + dx, b[4] + dz, b[0], b[1]))) { [dx, dz] = fit(0); dy = settle(dx, dz); }      // nothing on the ground may hang over the edge
   held.d = [dx, dy, dz]; carry.position.set(dx, dy * H + .25, dz);
 }
 // a fresh mesh for a brick whose shape or place changed
