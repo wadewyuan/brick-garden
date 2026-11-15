@@ -657,21 +657,57 @@ function changedFree() { save.free = cur.bricks; persist(); frameFree(); }
 const ndc = new THREE.Vector2();
 // Where would a w×d brick land for a finger at (px, py)?
 // undefined: not on the board. null: on the board, but the stack is already too tall.
-function boardSpot(px, py, w, d, n = 1) {
+// What the finger is touching. A top means "on here"; a brick's side means "next to it".
+// The side of a stud counts as the top it stands on.
+function touchAt(px, py) {
   ray.far = Infinity; ray.setFromCamera(ndc.set(px / innerWidth * 2 - 1, 1 - py / innerHeight * 2), camera);
-  const hit = ray.intersectObjects([plateMesh, ...cur.group.children], true)[0];
+  const hit = ray.intersectObjects([plateMesh, studMesh, ...cur.group.children], true)[0];
   if (!hit) return undefined;
-  // touching a top means "on here"; touching a brick's side means "next to it"
-  const up = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y > .5;
-  const q = hit.point.clone().addScaledVector(hit.face.normal, up ? -.05 : .3);
+  const nrm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld), p = hit.point;
+  const stud = Math.hypot(p.x + HALF - Math.floor(p.x + HALF) - .5, p.z + HALF - Math.floor(p.z + HALF) - .5) < .33;
+  const up = nrm.y > .5 || stud;
+  return { hit, up, q: up ? p.clone().setY(p.y - .05) : p.clone().addScaledVector(nrm, .3) };
+}
+function boardSpot(px, py, w, d, n = 1) {
+  const t = touchAt(px, py); if (!t) return undefined;
+  const { hit, up, q } = t;
   const x = clampI(Math.round(q.x + HALF - w / 2), 0, SIZE - w);     // centred under the finger
   const z = clampI(Math.round(q.z + HALF - d / 2), 0, SIZE - d);
   let y = 0;
   for (const b of cur.bricks) if (b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z) y = Math.max(y, b[3] + tall(b[7]));
   return y + n > MAX_LAYERS ? null : { x, y, z };
 }
+// Free build: bricks pull toward a tidy place, like magnets. Near the finger, a spot that sits squarely on the brick
+// below, or flush against a neighbour, wins over the exact spot under the finger; moving a stud further overrides it.
+const landY = (x, z, w, d) => { let y = 0; for (const b of cur.bricks) if (b[2] < x + w && b[2] + b[0] > x && b[4] < z + d && b[4] + b[1] > z) y = Math.max(y, b[3] + tall(b[7])); return y; };
+function magnetSpot(px, py, w, d, n) {
+  const t = touchAt(px, py); if (!t) return undefined;
+  const { hit, up, q } = t;
+  const fx = q.x + HALF - w / 2, fz = q.z + HALF - d / 2;                 // where the finger says, before rounding to studs
+  const rx = clampI(Math.round(fx), 0, SIZE - w), rz = clampI(Math.round(fz), 0, SIZE - d);
+  const want = up ? Math.round(hit.point.y / H) : landY(rx, rz, w, d);   // the level the finger is touching
+  const k = w + ',' + d;
+  let best = null, top = -Infinity;
+  for (let x = Math.max(0, rx - 1); x <= Math.min(SIZE - w, rx + 1); x++) for (let z = Math.max(0, rz - 1); z <= Math.min(SIZE - d, rz + 1); z++) {
+    const y = landY(x, z, w, d);
+    let s = (y === want ? 100 : 0) - 12 * Math.hypot(x - fx, z - fz), on = 0;
+    if (cur.stick && cur.stick.k === k && cur.stick.x === x && cur.stick.z === z) s += 2;      // a little force is needed to pull it away
+    for (const b of cur.bricks) {
+      const bt = b[3] + tall(b[7]), ox = Math.min(x + w, b[2] + b[0]) - Math.max(x, b[2]), oz = Math.min(z + d, b[4] + b[1]) - Math.max(z, b[4]);
+      if (bt === y && ox > 0 && oz > 0) { on += ox * oz; s += ((x === b[2]) + (x + w === b[2] + b[0]) + (z === b[4]) + (z + d === b[4] + b[1])); }   // resting on it
+      else if (b[3] < y + n && bt > y) {                                                                                                           // beside it
+        if (ox === 0 && oz > 0) s += 3 * oz + 3 * ((z === b[4]) + (z + d === b[4] + b[1]));
+        else if (oz === 0 && ox > 0) s += 3 * ox + 3 * ((x === b[2]) + (x + w === b[2] + b[0]));
+      }
+    }
+    s += 6 * on / (w * d);
+    if (s > top) { top = s; best = { x, y, z }; }
+  }
+  cur.stick = { k, x: best.x, z: best.z };
+  return best.y + n > MAX_LAYERS ? null : best;
+}
 function spotAt(px, py) {
-  const o = cur.sel, [w, d, s] = turned(o, cur.rot), at = boardSpot(px, py, w, d, tall(s));
+  const o = cur.sel, [w, d, s] = turned(o, cur.rot), at = magnetSpot(px, py, w, d, tall(s));
   return at ? [w, d, at.x, at.y, at.z, o.c, o.e, s] : at;
 }
 // the see-through brick that follows the finger; letting go drops the real one there
@@ -805,7 +841,7 @@ canvas.addEventListener('pointerdown', e => {
     // a second finger while the first one has been aiming a brick for a moment: turn the brick
     if (down?.aim && state === 'free' && performance.now() - down.t > 300) return turnBrick();
     // otherwise stop aiming; in free build two fingers slide and pinch the view
-    down = null; showAim(undefined);
+    down = null; showAim(undefined); document.body.classList.remove('placing');
     pinch = state === 'free' && fingers.size === 2 ? spread() : null;
     return;
   }
@@ -815,7 +851,8 @@ canvas.addEventListener('pointerdown', e => {
   // finger on the board: aim a brick. Finger on the background: turn the view.
   if (boardSpot(e.clientX, e.clientY, 1, 1) === undefined) return;
   if (!cur.sel) { down = null; sfx.hint(); nudge(); return; }
-  down.aim = true; showAim(state === 'free' ? spotAt(e.clientX, e.clientY) : aimMission(e.clientX, e.clientY));
+  down.aim = true; cur.stick = null; document.body.classList.add('placing');      // the buttons get out of the way while a brick is held
+  showAim(state === 'free' ? spotAt(e.clientX, e.clientY) : aimMission(e.clientX, e.clientY));
 });
 canvas.addEventListener('pointermove', e => {
   const f = fingers.get(e.pointerId); if (f) { f.x = e.clientX; f.y = e.clientY; }
@@ -832,12 +869,12 @@ canvas.addEventListener('pointermove', e => {
 addEventListener('pointerup', e => {
   fingers.delete(e.pointerId); pinch = null;
   if (!down || e.pointerId !== down.id) return;
-  const d = down; down = null;
+  const d = down; down = null; document.body.classList.remove('placing');
   if (d.pan) return;
   if (d.aim) return state === 'free' ? dropAim() : aiming() ? dropMission() : showAim(undefined);
   if (!d.drag) tap(e.clientX, e.clientY);
 });
-addEventListener('pointercancel', e => { fingers.delete(e.pointerId); pinch = null; down = null; showAim(undefined); });
+addEventListener('pointercancel', e => { fingers.delete(e.pointerId); pinch = null; down = null; showAim(undefined); document.body.classList.remove('placing'); });
 // the mouse wheel zooms; while a brick is being aimed it turns the brick instead
 canvas.addEventListener('wheel', e => { if (state !== 'free') return; if (down?.aim) turnBrick(); else zoomBy(Math.exp(e.deltaY * .0015)); }, { passive: true });
 
@@ -926,6 +963,9 @@ function frame(now) {
 renderHome();
 $('boot').hidden = true;
 requestAnimationFrame(frame);
+
+// ?debug exposes a probe: where would the picked free-build brick go for a finger over plate position (x, y, z)?
+if (params.has('debug')) window.probe = (x, y, z, keep) => { if (!keep) cur.stick = null; const [px, py] = toScreen(new THREE.Vector3(x - HALF, y * H, z - HALF)); const b = spotAt(px, py); return b && [b[2], b[3], b[4]]; };
 
 // —— test hooks: ?auto=duck plays a mission by itself, &stop=3 pauses after three bricks ——
 if (params.get('auto')) {
